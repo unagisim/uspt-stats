@@ -53,8 +53,15 @@ export interface SideStats {
   rally: Partial<Record<RallyLength, Ratio>>;
   /** Points gagnés sur son service selon la zone visée. */
   serveZones: Partial<Record<ServeZone, Ratio>>;
-  /** Points terminés par ce joueur au filet (gagnés = coup gagnant ou faute adverse). */
+  /**
+   * Points terminés par ce joueur au filet : won = gagnés (coup gagnant ou faute
+   * provoquée chez l'adversaire), total = gagnés + perdus (fautes du joueur au filet).
+   */
   netPoints: Ratio;
+  /** Coups gagnants réussis au filet. */
+  netWinners: number;
+  /** Fautes (directes ou provoquées) commises au filet. */
+  netErrors: number;
   /** Zones des coups gagnants de ce joueur. */
   winnerZones: Partial<Record<EndZone, number>>;
 }
@@ -108,6 +115,8 @@ function emptySide(): SideStats {
     rally: {},
     serveZones: {},
     netPoints: ratio(),
+    netWinners: 0,
+    netErrors: 0,
     winnerZones: {},
   };
 }
@@ -200,9 +209,13 @@ export function computeStats(allPoints: readonly PointRecord[], setNumber?: numb
       hasServeZoneDetail = true;
       count((S[srv].serveZones[d.serveZone] ??= ratio()), w === srv);
     }
-    if (d?.position === 'net' || d?.netApproach) {
+    // Au filet : position « Filet » (mode expert) ; sans position, une volée ou un smash.
+    const atNet = d?.position ? d.position === 'net' : d?.netApproach === true || d?.shot === 'volley' || d?.shot === 'smash';
+    if (atNet) {
       hasNetDetail = true;
       count(S[hitter].netPoints, hitter === w);
+      if (d?.ending === 'winner') S[hitter].netWinners++;
+      else if (d?.ending) S[hitter].netErrors++;
     }
     if (d?.endZone && d.ending === 'winner') {
       hasZoneDetail = true;

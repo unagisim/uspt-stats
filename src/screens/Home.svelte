@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import FileReady from '../components/FileReady.svelte';
   import { backupFileName } from '../lib/backup';
   import { configOf, db, deleteMatch, exportBackup, fullName, importBackup, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
@@ -31,6 +32,8 @@
   let backupMsg = $state('');
   let backupError = $state(false);
   let busy = $state(false);
+  /** Sauvegarde préparée, partagée par un tap dédié. */
+  let backupFile = $state<File | null>(null);
 
   async function loadMatches() {
     matches = await db.matches.orderBy('updatedAt').reverse().toArray();
@@ -40,15 +43,11 @@
     busy = true;
     backupMsg = '';
     backupError = false;
+    backupFile = null;
     try {
       const b = await exportBackup();
-      const blob = new Blob([JSON.stringify(b, null, 1)], { type: 'application/json' });
-      const { shareOrDownload } = await import('../lib/export/share');
-      const name = backupFileName();
-      const res = await shareOrDownload(blob, name, 'Sauvegarde USPT Stats');
-      if (res !== 'cancelled') {
-        backupMsg = `${b.matches.length} match${b.matches.length > 1 ? 's' : ''} sauvegardé${b.matches.length > 1 ? 's' : ''} dans ${name}.`;
-      }
+      backupFile = new File([JSON.stringify(b, null, 1)], backupFileName(), { type: 'application/json' });
+      backupMsg = `${b.matches.length} match${b.matches.length > 1 ? 's' : ''} et ${b.presets.length} note${b.presets.length > 1 ? 's' : ''} rapide${b.presets.length > 1 ? 's' : ''} dans le fichier.`;
     } catch {
       backupError = true;
       backupMsg = 'La sauvegarde a échoué. Réessayez.';
@@ -223,6 +222,9 @@
       <input type="file" accept="application/json,.json" onchange={restore} disabled={busy} />
     </label>
     {#if backupMsg}<p class="hint" class:error={backupError} role="status">{backupMsg}</p>{/if}
+    {#if backupFile}
+      <FileReady file={backupFile} title="Sauvegarde USPT Stats" onClose={() => (backupFile = null)} />
+    {/if}
   </section>
 </div>
 

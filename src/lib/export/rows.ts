@@ -47,12 +47,13 @@ import { frac, pct, type MatchStats, type Ratio, type ShotCount } from '../stats
 
 /** Rubriques alimentées par les modes standard et expert. */
 export const SHOT_SECTION = 'Détail par type de coup';
+export const NET_SECTION = 'Jeu au filet';
 
 export const DETAIL_SECTIONS = [
   SHOT_SECTION,
   'Longueur des échanges',
   'Service par zone',
-  'Jeu au filet',
+  NET_SECTION,
   'Zones des coups gagnants',
 ];
 
@@ -142,7 +143,10 @@ export function statRows(s: MatchStats): StatRow[] {
     }
   }
   if (s.hasNetDetail) {
+    add(net, 'Points terminés au filet', s.A.netPoints.total, s.B.netPoints.total);
     add(net, 'Points gagnés au filet', withPct(s.A.netPoints), withPct(s.B.netPoints));
+    add(net, 'Coups gagnants au filet', s.A.netWinners, s.B.netWinners);
+    add(net, 'Fautes au filet', s.A.netErrors, s.B.netErrors);
   }
   if (s.hasZoneDetail) {
     for (const k of Object.keys(END_ZONE) as EndZone[]) {

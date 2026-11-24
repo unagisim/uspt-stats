@@ -5,10 +5,12 @@
   import { configOf, db, exportMatch, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
+  import FileReady from '../components/FileReady.svelte';
   import ShotTable from '../components/ShotTable.svelte';
   import {
     balance,
     DETAIL_SECTIONS,
+    NET_SECTION,
     noteRows,
     SHOT_SECTION,
     shotsPlayed,
@@ -59,15 +61,22 @@
   let exporting = $state<ExportKind | null>(null);
   let exportMsg = $state('');
   let exportError = $state(false);
+  /** Fichier préparé, à partager par un tap dédié (exigence d'Android). */
+  let ready = $state<File | null>(null);
+
+  // Précharge le module PDF pour que la préparation soit rapide, même hors ligne.
+  onMount(() => {
+    import('../lib/export/pdf').catch(() => {});
+  });
 
   async function exportFile(kind: ExportKind) {
     if (!match || exporting) return;
     exporting = kind;
     exportMsg = '';
     exportError = false;
+    ready = null;
     try {
       const m = $state.snapshot(match);
-      const { shareOrDownload } = await import('../lib/export/share');
       let blob: Blob;
       let fileName: string;
       if (kind === 'pdf') {
@@ -85,8 +94,7 @@
         blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
         fileName = `${base}_${kind === 'points' ? 'points' : 'stats'}.csv`;
       }
-      const res = await shareOrDownload(blob, fileName, 'Feuille de match');
-      exportMsg = res === 'downloaded' ? `Fichier téléchargé : ${fileName}` : res === 'shared' ? 'Fichier partagé.' : '';
+      ready = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
     } catch (e) {
       exportError = true;
       exportMsg = "L'export a échoué. Réessayez.";
@@ -245,6 +253,15 @@
           <h2>{section}</h2>
           {#if section === SHOT_SECTION}
             <ShotTable shots={shotsPlayed(s)} a={s.A.byShot} b={s.B.byShot} {names} />
+          {:else if section === NET_SECTION}
+            <CompareRow label="Points terminés au filet" a={String(s.A.netPoints.total)} b={String(s.B.netPoints.total)} va={s.A.netPoints.total} vb={s.B.netPoints.total} />
+            <CompareRow label="Points gagnés au filet" a={withPct(s.A.netPoints)} b={withPct(s.B.netPoints)} va={n(s.A.netPoints)} vb={n(s.B.netPoints)} />
+            <CompareRow label="Coups gagnants au filet" a={String(s.A.netWinners)} b={String(s.B.netWinners)} va={s.A.netWinners} vb={s.B.netWinners} />
+            <CompareRow label="Fautes au filet" a={String(s.A.netErrors)} b={String(s.B.netErrors)} va={s.A.netErrors} vb={s.B.netErrors} lowerIsBetter />
+            <p class="hint">
+              Points terminés par le joueur au filet : position « Filet » en mode expert, sinon volée ou smash. Gagnés =
+              coup gagnant ou faute provoquée chez l'adversaire.
+            </p>
           {:else}
             {#each rows as r (r.label)}
               <CompareRow label={r.label} a={r.a} b={r.b} />
@@ -269,6 +286,9 @@
         l'accueil, rubrique Sauvegarde.
       </p>
       {#if exportMsg}<p class="hint" class:error={exportError} role="status">{exportMsg}</p>{/if}
+      {#if ready}
+        <FileReady file={ready} title="Feuille de match" onClose={() => (ready = null)} />
+      {/if}
     </section>
   {/if}
 </div>

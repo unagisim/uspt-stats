@@ -121,8 +121,37 @@ describe('stats du mode expert', () => {
 
   it('points au filet et zones des coups gagnants', () => {
     expect(s.B.netPoints).toEqual({ won: 1, total: 2 });
+    expect(s.B.netWinners).toBe(1);
+    expect(s.B.netErrors).toBe(1);
     expect(s.A.winnerZones).toEqual({ right_deep: 1 });
     expect(s.hasZoneDetail).toBe(true);
+  });
+});
+
+describe('jeu au filet en mode standard', () => {
+  const s = stats([
+    p('A', { ending: 'winner', shot: 'volley' }),
+    p('A', { ending: 'winner', shot: 'smash' }),
+    p('B', { ending: 'unforced_error', shot: 'volley' }), // faute de A au filet
+    p('B', { ending: 'winner', shot: 'forehand' }), // fond de court : ignoré
+    p('A', { ending: 'winner', shot: 'volley', position: 'midcourt' }), // position donnée : pas au filet
+  ]);
+
+  it('volée et smash comptés au filet quand la position n’est pas saisie', () => {
+    expect(s.hasNetDetail).toBe(true);
+    expect(s.A.netPoints).toEqual({ won: 2, total: 3 });
+    expect(s.A.netWinners).toBe(2);
+    expect(s.A.netErrors).toBe(1);
+    expect(s.B.netPoints).toEqual({ won: 0, total: 0 });
+  });
+
+  it('lignes de la rubrique', () => {
+    expect(statRows(s).filter((r) => r.section === 'Jeu au filet').map((r) => [r.label, r.a, r.b])).toEqual([
+      ['Points terminés au filet', '3', '0'],
+      ['Points gagnés au filet', '2/3 (67 %)', '–'],
+      ['Coups gagnants au filet', '2', '0'],
+      ['Fautes au filet', '1', '0'],
+    ]);
   });
 });
 
