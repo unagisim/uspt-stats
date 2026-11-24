@@ -113,4 +113,24 @@ export interface IncidentEvent {
   note?: string;
 }
 
-export type MatchEvent = PointEvent | IncidentEvent;
+/** Thèmes proposés pour les notes du coach. */
+export type NoteTag =
+  | 'positive'
+  | 'negative'
+  | 'frustration'
+  | 'concentration'
+  | 'tactic'
+  | 'physical'
+  | 'technique';
+
+/** Note du coach sur un point ou un moment du match (sans effet sur le score). */
+export interface NoteEvent {
+  kind: 'note';
+  ts: number;
+  text: string;
+  tags?: NoteTag[];
+  /** Joueur concerné ; absent = le match en général. */
+  player?: Side;
+}
+
+export type MatchEvent = PointEvent | IncidentEvent | NoteEvent;

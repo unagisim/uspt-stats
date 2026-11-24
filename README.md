@@ -16,7 +16,11 @@ npm run check    # vérification des types
 npm run build    # version de production dans dist/
 ```
 
-Les icônes de `public/` sont générées par `node scripts/make-icons.mjs`.
+Les icônes et le logo de `public/` sont générés à partir de `logo.jpg` (logo du club) par :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/make-icons.ps1
+```
 
 ## Publication
 

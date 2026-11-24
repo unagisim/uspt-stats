@@ -1,7 +1,48 @@
 // Lignes de statistiques communes aux exports (CSV et PDF).
 
-import type { EndZone, RallyLength, ServeZone, Shot } from '../engine';
-import { END_ZONE, RALLY, SERVE_ZONE, SHOT } from '../labels';
+import type { EndZone, NoteRecord, NoteTag, PointRecord, RallyLength, ServeZone, Shot, Side } from '../engine';
+import { describePoint, END_ZONE, NOTE_TAGS, noteMoment, RALLY, SERVE_ZONE, SHOT } from '../labels';
+
+export interface NoteRow {
+  setNumber: number;
+  moment: string;
+  player: string;
+  side?: Side;
+  tags: string[];
+  text: string;
+  /** Dernier point joué avant la note. */
+  after: string;
+}
+
+/** Notes du coach mises en forme, avec le moment et le dernier point joué. */
+export function noteRows(
+  notes: readonly NoteRecord[],
+  points: readonly PointRecord[],
+  names: { A: string; B: string },
+): NoteRow[] {
+  return notes.map((n) => {
+    const last = n.lastPointIndex !== null ? points[n.lastPointIndex] : undefined;
+    return {
+      setNumber: n.setNumber,
+      moment: noteMoment(n),
+      player: n.player ? names[n.player] : 'Match',
+      ...(n.player ? { side: n.player } : {}),
+      tags: n.tags.map((t) => NOTE_TAGS[t]),
+      text: n.text,
+      after: last ? describePoint(last.winner, last.details, names) : '',
+    };
+  });
+}
+
+/** Nombre de notes par thème pour un joueur : [["Énervement", 2], …]. */
+export function tagCounts(notes: readonly NoteRecord[], side: Side): [string, number][] {
+  const counts = new Map<NoteTag, number>();
+  for (const n of notes) {
+    if (n.player !== side) continue;
+    for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => [NOTE_TAGS[t], c]);
+}
 import { frac, pct, type MatchStats, type Ratio } from '../stats';
 
 /** Rubriques alimentées par les modes standard et expert. */

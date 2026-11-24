@@ -73,6 +73,22 @@ describe('CSV des stats', () => {
   });
 });
 
+describe('notes du coach dans les exports', () => {
+  it('moment, joueur, thèmes, commentaire et dernier point', () => {
+    const events: MatchEvent[] = [
+      ...pts('AAB'),
+      { kind: 'note', ts: ts0, text: 'Baisse la tête', tags: ['negative', 'concentration'], player: 'A' },
+      { kind: 'note', ts: ts0, text: 'Vent fort', tags: [] },
+    ];
+    const rows = lines(statsCsv(match(events)));
+    const i = rows.indexOf('Notes du coach');
+    expect(i).toBeGreaterThan(0);
+    expect(rows[i + 1]).toBe('Moment;Joueur;Thèmes;Commentaire;Dernier point');
+    expect(rows[i + 2]).toBe('Set 1 · 0-0 · 30-15;L. Martin;Attitude négative, Déconcentration;Baisse la tête;Point H. Durand');
+    expect(rows[i + 3]).toBe('Set 1 · 0-0 · 30-15;Match;;Vent fort;Point H. Durand');
+  });
+});
+
 describe('informations du match', () => {
   it('titre, détails, score et nom de fichier', () => {
     const info = matchInfo(match(pts('A'.repeat(24))));

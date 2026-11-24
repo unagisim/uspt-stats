@@ -5,7 +5,7 @@ import { autoTable, type RowInput } from 'jspdf-autotable';
 import type { StoredMatch } from '../db';
 import { computeStats, formatDuration, type MatchStats } from '../stats';
 import { formatDate, matchInfo, type MatchInfo } from './meta';
-import { statRows } from './rows';
+import { noteRows, statRows } from './rows';
 
 type RGB = [number, number, number];
 const BLUE: RGB = [24, 95, 165];
@@ -132,10 +132,31 @@ export function buildMatchPdf(m: StoredMatch): { blob: Blob; fileName: string } 
 
   if (points.length === 0) {
     doc.text('Aucun point saisi.', MARGIN, y);
+    y += 10;
   } else {
     y = heading(doc, y, 'Momentum');
     y = momentumChart(doc, y, all, info) + 9;
+  }
 
+  const notes = noteRows(info.replay.notes, points, info.short);
+  if (notes.length) {
+    y = ensureSpace(doc, y, 30);
+    y = heading(doc, y, `Notes du coach (${notes.length})`);
+    autoTable(doc, {
+      startY: y,
+      margin: { left: MARGIN, right: MARGIN },
+      head: [['Moment', 'Joueur', 'Thèmes', 'Commentaire']],
+      body: notes.map((n) => [n.moment + (n.after ? `\n${n.after}` : ''), n.player, n.tags.join(', '), n.text]),
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 1.6, valign: 'top', lineColor: [213, 217, 223], lineWidth: 0.2 },
+      headStyles: { fillColor: LIGHT, textColor: [21, 23, 26], fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 46 }, 1: { cellWidth: 24 }, 2: { cellWidth: 34 } },
+    });
+    y = lastY(doc) + 9;
+  }
+
+  if (points.length > 0) {
+    y = ensureSpace(doc, y, 40);
     y = heading(doc, y, 'Statistiques du match');
     y = statsTable(doc, y, all, info) + 9;
 

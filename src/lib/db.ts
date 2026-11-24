@@ -2,7 +2,8 @@
 // le score est toujours recalculé par le moteur.
 
 import Dexie, { type EntityTable } from 'dexie';
-import { FORMATS, type FormatId, type MatchConfig, type MatchEvent, type Side } from './engine';
+import { makeBackup, parseBackup, planImport, type Backup } from './backup';
+import { FORMATS, replay, type FormatId, type MatchConfig, type MatchEvent, type Side } from './engine';
 import { fullName, splitName } from './names';
 
 export interface Player {
@@ -74,6 +75,38 @@ export const configOf = (m: StoredMatch): MatchConfig => ({
 });
 
 export { fullName, shortName, splitName } from './names';
+
+/** Sauvegarde complète : tous les joueurs et tous les matchs de l'appareil. */
+export async function exportBackup(): Promise<Backup> {
+  return makeBackup(await db.players.toArray(), await db.matches.toArray());
+}
+
+export interface ImportResult {
+  added: number;
+  updated: number;
+  unchanged: number;
+  invalid: number;
+}
+
+/**
+ * Importe une sauvegarde sans rien effacer : les nouveaux matchs sont ajoutés, les matchs
+ * déjà présents ne sont remplacés que par une version plus récente. Les joueurs sont
+ * rattachés à ceux de l'appareil par leur nom (les identifiants diffèrent d'un appareil à l'autre).
+ */
+export async function importBackup(text: string): Promise<ImportResult> {
+  const { matches, invalid } = parseBackup(text);
+  const plan = planImport(await db.matches.toArray(), matches);
+  const toWrite = [...plan.add, ...plan.update];
+  await db.transaction('rw', db.players, db.matches, async () => {
+    for (const m of toWrite) {
+      const A = await findOrCreatePlayer(fullName(m.players.A) || m.players.A.nom);
+      const B = await findOrCreatePlayer(fullName(m.players.B) || m.players.B.nom);
+      const winner = replay(configOf(m), m.events).state.winner;
+      await db.matches.put({ ...m, players: { A, B }, winner, status: winner ? 'finished' : 'in_progress' });
+    }
+  });
+  return { added: plan.add.length, updated: plan.update.length, unchanged: plan.unchanged, invalid };
+}
 
 /** Supprime définitivement un match de l'appareil. */
 export async function deleteMatch(id: string): Promise<void> {

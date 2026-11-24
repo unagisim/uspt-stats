@@ -5,6 +5,7 @@ import {
   other,
   type MatchConfig,
   type MatchEvent,
+  type NoteTag,
   type Pair,
   type PointDetails,
   type Side,
@@ -70,9 +71,28 @@ export interface PointRecord {
   details?: PointDetails;
 }
 
+/** Note du coach replacée dans le match : score au moment où elle a été prise. */
+export interface NoteRecord {
+  eventIndex: number;
+  ts: number;
+  text: string;
+  tags: NoteTag[];
+  player?: Side;
+  setNumber: number;
+  /** Jeux du set en cours (ou du set qui vient de se terminer si le match est fini). */
+  games: Pair;
+  /** Score du jeu affiché (0, 15, 30, 40, AV ou points du jeu décisif). */
+  score: { A: string; B: string };
+  inTiebreak: boolean;
+  /** Index (dans `points`) du dernier point joué avant la note, ou null. */
+  lastPointIndex: number | null;
+  matchOver: boolean;
+}
+
 export interface ReplayResult {
   state: ScoreState;
   points: PointRecord[];
+  notes: NoteRecord[];
 }
 
 const zero = (): Pair => ({ A: 0, B: 0 });
@@ -274,8 +294,28 @@ export function setsSummary(s: ScoreState): string[] {
 export function replay(config: MatchConfig, events: readonly MatchEvent[]): ReplayResult {
   let s = initialState(config);
   const points: PointRecord[] = [];
+  const notes: NoteRecord[] = [];
 
   events.forEach((e, i) => {
+    // Les notes sont gardées même après la fin du match (commentaires d'après-match).
+    if (e.kind === 'note') {
+      const over = s.winner !== null;
+      const lastSet = s.completedSets[s.completedSets.length - 1];
+      notes.push({
+        eventIndex: i,
+        ts: e.ts,
+        text: e.text,
+        tags: e.tags ?? [],
+        ...(e.player ? { player: e.player } : {}),
+        setNumber: over ? s.completedSets.length : s.completedSets.length + 1,
+        games: over && lastSet ? { ...lastSet.games } : { ...s.games },
+        score: over ? { A: '', B: '' } : formatPoints(s),
+        inTiebreak: !over && s.inTiebreak,
+        lastPointIndex: points.length ? points.length - 1 : null,
+        matchOver: over,
+      });
+      return;
+    }
     if (s.winner) return;
     if (e.kind === 'point') {
       const before = s;
@@ -315,5 +355,5 @@ export function replay(config: MatchConfig, events: readonly MatchEvent[]): Repl
     }
   });
 
-  return { state: s, points };
+  return { state: s, points, notes };
 }

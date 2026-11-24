@@ -4,6 +4,8 @@ import type {
   CourtPosition,
   EndZone,
   IncidentType,
+  NoteTag,
+  PointDetails,
   PointEnding,
   RallyLength,
   ServeOutcome,
@@ -71,6 +73,42 @@ export const RALLY: Record<RallyLength, string> = {
   '5-8': '5 à 8 coups',
   '9+': '9 coups et plus',
 };
+
+export const NOTE_TAGS: Record<NoteTag, string> = {
+  positive: 'Attitude positive',
+  negative: 'Attitude négative',
+  frustration: 'Énervement',
+  concentration: 'Déconcentration',
+  tactic: 'Tactique',
+  technique: 'Technique',
+  physical: 'Physique',
+};
+
+/** "Point L. Martin (Faute directe, revers)", "Point L. Martin (ace)". */
+export function describePoint(winner: 'A' | 'B', details: PointDetails | undefined, names: { A: string; B: string }): string {
+  let extra = '';
+  if (details?.serveOutcome === 'ace') extra = 'ace';
+  else if (details?.serveOutcome === 'double_fault') extra = 'double faute';
+  else if (details?.ending) {
+    extra = [ENDING[details.ending], details.shot ? SHOT[details.shot].toLowerCase() : ''].filter(Boolean).join(', ');
+  }
+  return `Point ${names[winner]}${extra ? ` (${extra})` : ''}`;
+}
+
+/** Moment d'une note : "Set 2 · 3-4 · 15-30" ou "Après le match". */
+export function noteMoment(n: {
+  setNumber: number;
+  games: { A: number; B: number };
+  score: { A: string; B: string };
+  inTiebreak: boolean;
+  matchOver: boolean;
+}): string {
+  if (n.matchOver) return 'Après le match';
+  const parts = [`Set ${n.setNumber}`, `${n.games.A}-${n.games.B}`];
+  const pointsPlayed = n.score.A !== '0' || n.score.B !== '0';
+  if (pointsPlayed) parts.push(`${n.inTiebreak ? 'jeu décisif ' : ''}${n.score.A}-${n.score.B}`);
+  return parts.join(' · ');
+}
 
 export const SURFACE_LABELS: Record<string, string> = {
   dur: 'Dur',

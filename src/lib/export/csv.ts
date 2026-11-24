@@ -4,7 +4,7 @@ import type { StoredMatch } from '../db';
 import { ENDING, END_ZONE, POSITION, RALLY, SERVE_OUTCOME, SERVE_ZONE, SHOT, SPIN } from '../labels';
 import { computeStats } from '../stats';
 import { formatTime, matchInfo } from './meta';
-import { statRows } from './rows';
+import { noteRows, statRows } from './rows';
 
 const BOM = '﻿';
 
@@ -79,6 +79,12 @@ export function statsCsv(m: StoredMatch): string {
   if (sets.length > 1) sets.forEach((k) => scopes.push([`Set ${k}`, k]));
   for (const [scope, k] of scopes) {
     for (const r of statRows(computeStats(points, k))) rows.push([scope, r.section, r.label, r.a, r.b]);
+  }
+
+  const notes = noteRows(info.replay.notes, points, info.short);
+  if (notes.length) {
+    rows.push([], ['Notes du coach'], ['Moment', 'Joueur', 'Thèmes', 'Commentaire', 'Dernier point']);
+    for (const n of notes) rows.push([n.moment, n.player, n.tags.join(', '), n.text, n.after]);
   }
   return toCsv(rows);
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { configOf, db, deleteMatch, fullName, type StoredMatch } from '../lib/db';
+  import { backupFileName } from '../lib/backup';
+  import { configOf, db, deleteMatch, exportBackup, fullName, importBackup, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { applyUpdate, install, pwa } from '../lib/pwa.svelte';
   import { filterMatches, type StatusFilter } from '../lib/search';
@@ -21,6 +22,59 @@
     ['in_progress', 'En cours'],
     ['finished', 'Terminés'],
   ];
+
+  // ---- Sauvegarde JSON ----
+  let backupMsg = $state('');
+  let backupError = $state(false);
+  let busy = $state(false);
+
+  async function loadMatches() {
+    matches = await db.matches.orderBy('updatedAt').reverse().toArray();
+  }
+
+  async function saveBackup() {
+    busy = true;
+    backupMsg = '';
+    backupError = false;
+    try {
+      const b = await exportBackup();
+      const blob = new Blob([JSON.stringify(b, null, 1)], { type: 'application/json' });
+      const { shareOrDownload } = await import('../lib/export/share');
+      const name = backupFileName();
+      const res = await shareOrDownload(blob, name, 'Sauvegarde USPT Stats');
+      if (res !== 'cancelled') {
+        backupMsg = `${b.matches.length} match${b.matches.length > 1 ? 's' : ''} sauvegardé${b.matches.length > 1 ? 's' : ''} dans ${name}.`;
+      }
+    } catch {
+      backupError = true;
+      backupMsg = 'La sauvegarde a échoué. Réessayez.';
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function restore(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    busy = true;
+    backupMsg = '';
+    backupError = false;
+    try {
+      const r = await importBackup(await file.text());
+      await loadMatches();
+      const parts = [`${r.added} ajouté${r.added > 1 ? 's' : ''}`, `${r.updated} mis à jour`];
+      if (r.unchanged) parts.push(`${r.unchanged} déjà à jour`);
+      if (r.invalid) parts.push(`${r.invalid} illisible${r.invalid > 1 ? 's' : ''} ignoré${r.invalid > 1 ? 's' : ''}`);
+      backupMsg = `Import terminé : ${parts.join(', ')}.`;
+    } catch (err) {
+      backupError = true;
+      backupMsg = err instanceof Error ? err.message : "L'import a échoué.";
+    } finally {
+      busy = false;
+    }
+  }
 
   async function remove(id: string) {
     deleteError = '';
@@ -53,7 +107,10 @@
 </script>
 
 <div class="page">
-  <h1>USPT Stats</h1>
+  <header class="brand">
+    <img src="{import.meta.env.BASE_URL}logo.png" alt="US Pontet Tennis" width="96" height="94" />
+    <h1>USPT Stats</h1>
+  </header>
 
   {#if pwa.needRefresh}
     <div class="notice" role="status">
@@ -138,6 +195,21 @@
       </li>
     {/each}
   </ul>
+
+  <section class="card backup">
+    <h2>Sauvegarde</h2>
+    <p class="hint">
+      Les matchs ne sont enregistrés que sur cet appareil. Exportez-les régulièrement dans un fichier, et
+      importez ce fichier pour les retrouver sur un autre appareil. L'import n'efface rien : il ajoute les
+      matchs manquants et met à jour ceux qui ont changé.
+    </p>
+    <button onclick={saveBackup} disabled={busy || matches.length === 0}>Exporter tous les matchs (JSON)</button>
+    <label class="file" class:disabled={busy}>
+      Importer une sauvegarde
+      <input type="file" accept="application/json,.json" onchange={restore} disabled={busy} />
+    </label>
+    {#if backupMsg}<p class="hint" class:error={backupError} role="status">{backupMsg}</p>{/if}
+  </section>
 </div>
 
 <style>
@@ -184,6 +256,59 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 4px 0 16px;
+  }
+  .brand img {
+    width: 96px;
+    height: auto;
+    border-radius: 14px;
+    background: #fff;
+    flex: none;
+  }
+  .brand h1 {
+    margin: 0;
+  }
+  .backup {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .backup h2 {
+    margin: 0;
+  }
+  .hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .file {
+    position: relative;
+    min-height: var(--tap);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .file.disabled {
+    opacity: 0.6;
+  }
+  .file input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
   }
   .search {
     display: flex;

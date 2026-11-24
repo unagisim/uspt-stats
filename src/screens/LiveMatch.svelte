@@ -1,16 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import NoteEditor from '../components/NoteEditor.svelte';
   import PointInput from '../components/PointInput.svelte';
   import Scoreboard from '../components/Scoreboard.svelte';
   import { configOf, db, shortName, type InputMode, type StoredMatch } from '../lib/db';
-  import { ENDING, INCIDENTS, SHOT } from '../lib/labels';
+  import { describePoint, INCIDENTS, NOTE_TAGS, noteMoment } from '../lib/labels';
   import {
+    formatPoints,
     other,
     pointSituation,
     replay,
     setsSummary,
     type IncidentType,
     type MatchEvent,
+    type NoteTag,
     type PointDetails,
     type Side,
   } from '../lib/engine';
@@ -27,6 +30,7 @@
   let pendingLets = $state(0);
   let menuOpen = $state(false);
   let incidentType = $state<IncidentType | null>(null);
+  let noteOpen = $state(false);
 
   const config = $derived(match ? configOf(match) : null);
   const result = $derived(match && config ? replay(config, match.events) : null);
@@ -152,12 +156,30 @@
 
   function describe(e: MatchEvent): string {
     if (e.kind === 'incident') return `${INCIDENTS[e.type]}${e.player ? ` ${names[e.player]}` : ''}`;
-    const d = e.details;
-    let extra = '';
-    if (d?.serveOutcome === 'ace') extra = 'ace';
-    else if (d?.serveOutcome === 'double_fault') extra = 'double faute';
-    else if (d?.ending) extra = [ENDING[d.ending], d.shot ? SHOT[d.shot].toLowerCase() : ''].filter(Boolean).join(', ');
-    return `Point ${names[e.winner]}${extra ? ` (${extra})` : ''}`;
+    if (e.kind === 'note') {
+      const what = e.text || (e.tags ?? []).map((t) => NOTE_TAGS[t]).join(', ');
+      return `Note${e.player ? ` ${names[e.player]}` : ''} : ${what}`;
+    }
+    return describePoint(e.winner, e.details, names);
+  }
+
+  /** Moment affiché dans l'éditeur de note. */
+  const noteContext = $derived.by(() => {
+    if (!score) return '';
+    const over = score.winner !== null;
+    const last = score.completedSets.at(-1);
+    return noteMoment({
+      setNumber: over ? score.completedSets.length : score.completedSets.length + 1,
+      games: over && last ? last.games : score.games,
+      score: formatPoints(score),
+      inTiebreak: score.inTiebreak,
+      matchOver: over,
+    });
+  });
+
+  async function saveNote(n: { text: string; tags: NoteTag[]; player?: Side }) {
+    noteOpen = false;
+    await record({ kind: 'note', ts: Date.now(), text: n.text, ...(n.tags.length ? { tags: n.tags } : {}), ...(n.player ? { player: n.player } : {}) });
   }
 
   const endText = $derived.by(() => {
@@ -223,7 +245,9 @@
       </section>
     {/if}
 
-    {#if score.winner}
+    {#if noteOpen}
+      <NoteEditor {names} context={noteContext} onSave={saveNote} onCancel={() => (noteOpen = false)} />
+    {:else if score.winner}
       <section class="end card">
         <h2>{endText}</h2>
         <p class="final">{setsSummary(score).join('  ')}</p>
@@ -262,6 +286,7 @@
     <footer>
       <button class="undo" onclick={undo} aria-label="Annuler le dernier point">↶ Annuler</button>
       <span class="last">{lastEvent ? `Dernier : ${describe(lastEvent)}` : 'Aucun point saisi'}</span>
+      <button class="stats" onclick={() => { closeMenu(); noteOpen = !noteOpen; }} aria-pressed={noteOpen}>✎ Note</button>
       <button class="stats" onclick={onStats}>Stats</button>
     </footer>
   </div>
@@ -415,20 +440,23 @@
   }
   footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 4px 8px;
+  }
+  .undo,
+  .stats {
+    flex: 1;
+    font-weight: 600;
+    padding: 0 8px;
   }
   .undo {
-    flex: none;
-    font-weight: 600;
+    flex: 1.3;
   }
-  .stats {
-    flex: none;
-    margin-left: auto;
-    font-weight: 600;
-  }
+  /* Dernière action sur sa propre ligne, au-dessus des boutons. */
   .last {
-    flex: 1;
+    order: -1;
+    flex-basis: 100%;
     min-width: 0;
     font-size: 13px;
     color: var(--muted);
@@ -451,7 +479,8 @@
     }
     .big,
     .end,
-    .live > :global(.input) {
+    .live > :global(.input),
+    .live > :global(.note) {
       grid-column: 2;
       grid-row: 2 / 5;
       flex-direction: row;

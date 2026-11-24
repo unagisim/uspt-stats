@@ -19,12 +19,13 @@ export default defineConfig({
         scope: '.',
         display: 'standalone',
         orientation: 'any',
-        theme_color: '#185FA5',
-        background_color: '#f4f5f7',
+        // Couleurs du logo de l'US Pontet Tennis.
+        theme_color: '#071A44',
+        background_color: '#ffffff',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

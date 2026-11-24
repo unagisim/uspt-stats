@@ -5,7 +5,7 @@
   import { configOf, db, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
-  import { DETAIL_SECTIONS, statRows, type StatRow } from '../lib/export/rows';
+  import { DETAIL_SECTIONS, noteRows, statRows, tagCounts, type StatRow } from '../lib/export/rows';
 
   let { id, onBack }: { id: string; onBack: () => void } = $props();
 
@@ -25,6 +25,17 @@
   );
   const setCount = $derived(result ? Math.max(1, ...result.points.map((p) => p.setNumber)) : 1);
   const s = $derived(result ? computeStats(result.points, setFilter) : null);
+  /** Notes du coach du périmètre affiché (match entier ou set). */
+  const notes = $derived(
+    result ? result.notes.filter((n) => setFilter === undefined || n.setNumber === setFilter) : [],
+  );
+  const notesShown = $derived(result ? noteRows(notes, result.points, names) : []);
+  const tagSummary = $derived(
+    (['A', 'B'] as const)
+      .map((side) => [side, tagCounts(notes, side)] as const)
+      .filter(([, counts]) => counts.length > 0),
+  );
+
   const score = $derived.by(() => {
     if (!result) return '';
     const st = result.state;
@@ -108,6 +119,33 @@
           <button role="tab" aria-selected={setFilter === k} class:on={setFilter === k} onclick={() => (setFilter = k)}>Set {k}</button>
         {/each}
       </div>
+    {/if}
+
+    {#if notesShown.length}
+      <section class="card notes">
+        <h2>Notes du coach ({notesShown.length})</h2>
+        {#each tagSummary as [side, counts] (side)}
+          <p class="tagsum">
+            <strong class={side === 'A' ? 'pa' : 'pb'}>{names[side]}</strong> :
+            {counts.map(([t, c]) => (c > 1 ? `${t} ×${c}` : t)).join(', ')}
+          </p>
+        {/each}
+        <ol>
+          {#each notesShown as n, i (i)}
+            <li>
+              <div class="nhead">
+                <span class="moment">{n.moment}</span>
+                <span class="who {n.side === 'A' ? 'pa' : n.side === 'B' ? 'pb' : ''}">{n.player}</span>
+              </div>
+              {#if n.tags.length}
+                <div class="ntags">{#each n.tags as t (t)}<span>{t}</span>{/each}</div>
+              {/if}
+              {#if n.text}<p class="ntext">{n.text}</p>{/if}
+              {#if n.after}<p class="after">Après : {n.after}</p>{/if}
+            </li>
+          {/each}
+        </ol>
+      </section>
     {/if}
 
     {#if s.totalPoints === 0}
@@ -264,6 +302,67 @@
     color: var(--bg);
     border-color: var(--text);
     font-weight: 600;
+  }
+  .notes ol {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .notes li {
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .nhead {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .moment {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .who {
+    font-weight: 600;
+  }
+  .notes .pa,
+  .tagsum .pa {
+    color: var(--a-strong);
+  }
+  .notes .pb,
+  .tagsum .pb {
+    color: var(--b-strong);
+  }
+  .ntags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .ntags span {
+    background: var(--warn-bg);
+    color: var(--warn);
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .ntext {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .after {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .tagsum {
+    margin: 4px 0 0;
+    font-size: 14px;
   }
   .exports {
     display: flex;

@@ -246,6 +246,46 @@ describe('résumé du score', () => {
   });
 });
 
+describe('notes du coach', () => {
+  const note = (text: string, player?: Side): MatchEvent => ({
+    kind: 'note',
+    ts: 0,
+    text,
+    tags: ['frustration'],
+    ...(player ? { player } : {}),
+  });
+
+  it('une note ne change pas le score et garde le moment', () => {
+    const { state, notes, points } = replay(cfg(), [...pts(game('A') + 'AB'), note('Lance sa raquette', 'B')]);
+    expect(state.points).toEqual({ A: 1, B: 1 });
+    expect(points).toHaveLength(6);
+    expect(notes).toEqual([
+      {
+        eventIndex: 6,
+        ts: 0,
+        text: 'Lance sa raquette',
+        tags: ['frustration'],
+        player: 'B',
+        setNumber: 1,
+        games: { A: 1, B: 0 },
+        score: { A: '15', B: '15' },
+        inTiebreak: false,
+        lastPointIndex: 5,
+        matchOver: false,
+      },
+    ]);
+  });
+
+  it('les notes après la fin du match sont gardées', () => {
+    const { notes } = replay(cfg(), [...pts(set60('A') + set60('A')), note('Bon match')]);
+    expect(notes[0]).toMatchObject({ matchOver: true, setNumber: 2, games: { A: 6, B: 0 }, lastPointIndex: 47 });
+  });
+
+  it('note avant le premier point', () => {
+    expect(replay(cfg(), [note('Échauffement tendu')]).notes[0]).toMatchObject({ lastPointIndex: null, setNumber: 1 });
+  });
+});
+
 describe('annulation', () => {
   it('retirer le dernier événement revient à l’état précédent', () => {
     const events = pts(toSixAll + 'AAAAAAA');
