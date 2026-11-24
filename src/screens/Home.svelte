@@ -110,6 +110,8 @@
   }
 
   const dateFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+  /** Date de construction de la version installée (jj/mm/aaaa). */
+  const buildDate = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(new Date(__BUILD_DATE__));
 </script>
 
 <div class="page">
@@ -226,6 +228,10 @@
       <FileReady file={backupFile} title="Sauvegarde USPT Stats" onClose={() => (backupFile = null)} />
     {/if}
   </section>
+
+  <p class="version">
+    USPT Stats · version {__APP_VERSION__} du {buildDate} · {__APP_COMMIT__}
+  </p>
 </div>
 
 <style>
@@ -272,6 +278,13 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .version {
+    margin: 20px 0 8px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
   }
   .brand {
     display: flex;
