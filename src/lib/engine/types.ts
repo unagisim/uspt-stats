@@ -133,4 +133,23 @@ export interface NoteEvent {
   player?: Side;
 }
 
-export type MatchEvent = PointEvent | IncidentEvent | NoteEvent;
+/** Jeu gagné, saisi sans le détail des points (mode Jeux). */
+export interface GameEvent {
+  kind: 'game';
+  winner: Side;
+  ts: number;
+}
+
+/** Score corrigé à la main : remplace le score courant. */
+export interface AdjustEvent {
+  kind: 'adjust';
+  ts: number;
+  /** Sets terminés (un super jeu décisif gagné s'écrit 1-0 ou 0-1). */
+  sets: Pair[];
+  /** Jeux du set en cours. */
+  games: Pair;
+  /** Joueur au service au prochain jeu. */
+  server: Side;
+}
+
+export type MatchEvent = PointEvent | IncidentEvent | NoteEvent | GameEvent | AdjustEvent;

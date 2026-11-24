@@ -21,7 +21,8 @@ export interface PlayerRef {
   nom: string;
 }
 
-export type InputMode = 'quick' | 'standard' | 'expert';
+/** games = un tap par jeu (score seul) ; quick, standard, expert = point par point. */
+export type InputMode = 'games' | 'quick' | 'standard' | 'expert';
 
 export type Surface = 'dur' | 'terre' | 'gazon' | 'moquette' | 'synthetique';
 

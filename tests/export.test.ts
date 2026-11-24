@@ -67,7 +67,9 @@ describe('CSV des stats', () => {
   it('match puis un bloc par set', () => {
     const rows = lines(statsCsv(match(pts('A'.repeat(24) + 'BBBB'))));
     expect(rows[0]).toBe('Match;Léo Martin contre Hugo Durand');
-    expect(rows[5]).toBe('Périmètre;Rubrique;Statistique;Léo Martin;Hugo Durand');
+    // Horaires : 24 points toutes les 30 s depuis 14:30 → set 1 terminé à 14:41:30.
+    expect(rows.slice(4, 8)).toEqual(['Début;14:30', 'Fin;en cours', 'Durée du set 1;12 min', 'Durée du set 2;en cours']);
+    expect(rows[9]).toBe('Périmètre;Rubrique;Statistique;Léo Martin;Hugo Durand');
     expect(rows).toContain('Match;Résumé;Points gagnés;24;4');
     expect(rows).toContain('Set 2;Résumé;Points gagnés;0;4');
   });

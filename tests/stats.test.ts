@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS, replay, type MatchConfig, type MatchEvent, type PointDetails, type Side } from '../src/lib/engine';
-import { computeStats, formatDuration, frac, pct } from '../src/lib/stats';
-import { balance, shotsPlayed, statRows } from '../src/lib/export/rows';
+import { computeGameStats, computeStats, formatDuration, frac, pct } from '../src/lib/stats';
+import { balance, shotsPlayed, statRows, timingRows } from '../src/lib/export/rows';
 
 const cfg: MatchConfig = { format: FORMATS.FFT2, firstServer: 'A', letEnabled: false };
 
@@ -210,12 +210,51 @@ describe('filtre par set', () => {
   });
 });
 
+describe('stats par jeu (mode Jeux)', () => {
+  const at = (min: number) => new Date(2026, 10, 24, 14, min).getTime();
+  // A sert le 1er jeu ; les services alternent A, B, A, B.
+  const events: MatchEvent[] = [...'AABA'].map((w, i) => ({ kind: 'game' as const, winner: w as Side, ts: at(i * 5) }));
+  const r = replay(cfg, events);
+  const g = computeGameStats(r.games);
+
+  it('jeux gagnés, jeux de service et breaks', () => {
+    expect(g.total).toBe(4);
+    expect(g.hasGameOnly).toBe(true);
+    expect(g.A.gamesWon).toBe(3);
+    // Services : A, B, A, B. Gagnants : A, A, B, A.
+    expect(g.A.serviceGames).toEqual({ won: 1, total: 2 });
+    expect(g.A.breaks).toEqual({ won: 2, total: 2 });
+    expect(g.B.breaks).toEqual({ won: 1, total: 2 });
+    expect(g.A.longestStreak).toBe(2);
+    expect(g.momentum).toEqual([1, 2, 1, 2]);
+  });
+
+  it('rubrique « Jeux » dans les lignes d’export, sans lignes de points', () => {
+    const rows = statRows(computeStats(r.points), g);
+    expect(rows.map((x) => x.section)).toEqual(['Jeux', 'Jeux', 'Jeux', 'Jeux']);
+    expect(rows[2]).toMatchObject({ label: 'Breaks (jeux de retour gagnés)', a: '2/2', b: '1/2' });
+  });
+
+  it('horaires du match et des sets', () => {
+    expect(timingRows(r.timeline)).toEqual([
+      ['Début', '14:00'],
+      ['Fin', 'en cours'],
+      ['Durée du set 1', 'en cours'],
+    ]);
+    expect(timingRows(r.timeline, 1)).toEqual([
+      ['Début du set', '14:00'],
+      ['Fin du set', 'en cours'],
+    ]);
+  });
+});
+
 describe('affichage', () => {
   it('pourcentages, fractions et durées', () => {
     expect(pct({ won: 2, total: 3 })).toBe('67 %');
     expect(pct({ won: 0, total: 0 })).toBe('–');
     expect(frac({ won: 3, total: 5 })).toBe('3/5');
     expect(formatDuration(42 * 60_000)).toBe('42 min');
+    expect(formatDuration(20_000)).toBe('< 1 min');
     expect(formatDuration(65 * 60_000)).toBe('1 h 05');
   });
 });

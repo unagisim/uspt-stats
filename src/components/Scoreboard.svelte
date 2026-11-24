@@ -1,7 +1,16 @@
 <script lang="ts">
   import { formatPoints, other, type ScoreState, type Side } from '../lib/engine';
 
-  let { score, names }: { score: ScoreState; names: { A: string; B: string } } = $props();
+  let {
+    score,
+    names,
+    showPoints = true,
+  }: {
+    score: ScoreState;
+    names: { A: string; B: string };
+    /** false en mode Jeux : le score du jeu n'est pas suivi. */
+    showPoints?: boolean;
+  } = $props();
 
   const sides: Side[] = ['A', 'B'];
   const pts = $derived(formatPoints(score));
@@ -24,7 +33,7 @@
         {#if !score.isSuperTiebreakSet}
           <span class="set current" role="cell">{score.games[s]}</span>
         {/if}
-        <span class="pts" role="cell">{pts[s]}</span>
+        {#if showPoints}<span class="pts" role="cell">{pts[s]}</span>{/if}
       {/if}
     </div>
   {/each}

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import GameInput from '../components/GameInput.svelte';
   import NoteEditor from '../components/NoteEditor.svelte';
+  import ScoreFix from '../components/ScoreFix.svelte';
   import PointInput from '../components/PointInput.svelte';
   import Scoreboard from '../components/Scoreboard.svelte';
   import { configOf, db, shortName, type InputMode, type StoredMatch } from '../lib/db';
@@ -26,9 +28,10 @@
   }: { id: string; onExit: () => void; onStats: () => void; onPresets: () => void } = $props();
 
   const NO_PLAYER: IncidentType[] = ['interruption', 'resumption'];
-  const MODES: Record<InputMode, string> = { quick: 'Rapide', standard: 'Standard', expert: 'Expert' };
+  const MODES: Record<InputMode, string> = { games: 'Jeux', quick: 'Rapide', standard: 'Standard', expert: 'Expert' };
 
   let pointInput = $state<ReturnType<typeof PointInput> | null>(null);
+  let fixOpen = $state(false);
 
   let match = $state<StoredMatch | null>(null);
   let notFound = $state(false);
@@ -53,7 +56,8 @@
   });
 
   const banner = $derived.by(() => {
-    if (!score || !situation || score.winner) return null;
+    // En mode Jeux, le score du jeu n'est pas suivi : les balles de break, de set… n'ont pas de sens.
+    if (!score || !situation || score.winner || match?.inputMode === 'games') return null;
     if (situation.matchPoint) return { text: `Balle de match ${names[situation.matchPoint]}`, tone: 'hot' };
     if (situation.setPoint) return { text: `Balle de set ${names[situation.setPoint]}`, tone: 'hot' };
     if (situation.breakPoint) return { text: `Balle de break ${names[other(score.server)]}`, tone: 'warm' };
@@ -165,7 +169,42 @@
       const what = e.text || (e.tags ?? []).map((t) => NOTE_TAGS[t]).join(', ');
       return `Note${e.player ? ` ${names[e.player]}` : ''} : ${what}`;
     }
+    if (e.kind === 'game') return `Jeu ${names[e.winner]}`;
+    if (e.kind === 'adjust') {
+      const parts = [...e.sets, ...(e.games.A || e.games.B ? [e.games] : [])].map((g) => `${g.A}-${g.B}`);
+      return `Score corrigé : ${parts.join(' ') || '0-0'}`;
+    }
     return describePoint(e.winner, e.details, names);
+  }
+
+  // ---- Mode Jeux et correction du score ----
+  const game = (w: Side) => {
+    if (!score || score.winner) return;
+    record({ kind: 'game', winner: w, ts: Date.now() });
+  };
+
+  async function flipGame(i: number) {
+    const e = match?.events[i];
+    if (!match || e?.kind !== 'game') return;
+    match.events[i] = { ...e, winner: other(e.winner) };
+    await persist();
+  }
+
+  async function deleteGame(i: number) {
+    if (!match || match.events[i]?.kind !== 'game') return;
+    match.events.splice(i, 1);
+    await persist();
+  }
+
+  async function adjust(adj: { sets: { A: number; B: number }[]; games: { A: number; B: number }; server: Side }) {
+    fixOpen = false;
+    await record({ kind: 'adjust', ts: Date.now(), sets: adj.sets.map((g) => ({ ...g })), games: { ...adj.games }, server: adj.server });
+  }
+
+  function openFix() {
+    closeMenu();
+    noteOpen = false;
+    fixOpen = true;
   }
 
   /** Moment affiché dans l'éditeur de note. */
@@ -211,7 +250,7 @@
       </button>
     </header>
 
-    <Scoreboard {score} {names} />
+    <Scoreboard {score} {names} showPoints={match.inputMode !== 'games'} />
 
     <div class="banners" aria-live="polite">
       {#if banner}<p class="banner {banner.tone}">{banner.text}</p>{/if}
@@ -233,6 +272,8 @@
               <button class:on={match.inputMode === m} onclick={() => setMode(m as InputMode)}>{label}</button>
             {/each}
           </div>
+          <p class="q">Score</p>
+          <button class="wide" onclick={openFix}>Corriger le score</button>
           <p class="q">Incidents</p>
           <div class="grid">
             {#each Object.entries(INCIDENTS) as [t, text] (t)}
@@ -252,6 +293,17 @@
 
     {#if noteOpen}
       <NoteEditor {names} context={noteContext} onSave={saveNote} onCancel={() => (noteOpen = false)} onManage={onPresets} />
+    {:else if fixOpen && result}
+      <ScoreFix
+        {score}
+        format={config.format}
+        games={result.games}
+        {names}
+        onFlip={flipGame}
+        onDelete={deleteGame}
+        onAdjust={adjust}
+        onClose={() => (fixOpen = false)}
+      />
     {:else if score.winner}
       <section class="end card">
         <h2>{endText}</h2>
@@ -259,6 +311,8 @@
         <button class="primary" onclick={onStats}>Voir les statistiques</button>
         <button onclick={onExit}>Retour à l'accueil</button>
       </section>
+    {:else if match.inputMode === 'games'}
+      <GameInput {score} {names} onGame={game} onCorrect={openFix} />
     {:else if match.inputMode !== 'quick'}
       <PointInput
         bind:this={pointInput}
@@ -291,7 +345,7 @@
     <footer>
       <button class="undo" onclick={undo} aria-label="Annuler le dernier point">↶ Annuler</button>
       <span class="last">{lastEvent ? `Dernier : ${describe(lastEvent)}` : 'Aucun point saisi'}</span>
-      <button class="stats" onclick={() => { closeMenu(); noteOpen = !noteOpen; }} aria-pressed={noteOpen}>✎ Note</button>
+      <button class="stats" onclick={() => { closeMenu(); fixOpen = false; noteOpen = !noteOpen; }} aria-pressed={noteOpen}>✎ Note</button>
       <button class="stats" onclick={onStats}>Stats</button>
     </footer>
   </div>
@@ -370,8 +424,15 @@
   }
   .modes {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .modes button {
+    padding: 0 4px;
+  }
+  .wide {
+    width: 100%;
+    margin-bottom: 12px;
   }
   .modes .on {
     background: var(--text);
@@ -485,7 +546,8 @@
     .big,
     .end,
     .live > :global(.input),
-    .live > :global(.note) {
+    .live > :global(.note),
+    .live > :global(.fix) {
       grid-column: 2;
       grid-row: 2 / 5;
       flex-direction: row;

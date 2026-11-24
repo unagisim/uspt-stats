@@ -4,7 +4,7 @@
   import Momentum from '../components/Momentum.svelte';
   import { configOf, db, exportMatch, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
-  import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
+  import { computeGameStats, computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
   import FileReady from '../components/FileReady.svelte';
   import ShotTable from '../components/ShotTable.svelte';
   import {
@@ -16,6 +16,7 @@
     shotsPlayed,
     statRows,
     tagCounts,
+    timingRows,
     type StatRow,
   } from '../lib/export/rows';
 
@@ -35,8 +36,16 @@
   const names = $derived(
     match ? { A: shortName(match.players.A), B: shortName(match.players.B) } : { A: '', B: '' },
   );
-  const setCount = $derived(result ? Math.max(1, ...result.points.map((p) => p.setNumber)) : 1);
+  const setCount = $derived(
+    result
+      ? Math.max(1, result.timeline.sets.length, ...result.points.map((p) => p.setNumber), ...result.games.map((g) => g.setNumber))
+      : 1,
+  );
   const s = $derived(result ? computeStats(result.points, setFilter) : null);
+  /** Stats par jeu : seules disponibles quand les points ne sont pas saisis (mode Jeux). */
+  const g = $derived(result ? computeGameStats(result.games, setFilter) : null);
+  const showGames = $derived(!!g && g.total > 0 && (g.hasGameOnly || (s?.totalPoints ?? 0) === 0));
+  const timing = $derived(result ? timingRows(result.timeline, setFilter) : []);
   /** Notes du coach du périmètre affiché (match entier ou set). */
   const notes = $derived(
     result ? result.notes.filter((n) => setFilter === undefined || n.setNumber === setFilter) : [],
@@ -143,6 +152,19 @@
       </div>
     {/if}
 
+    {#if timing.length}
+      <section class="card">
+        <h2>Horaires</h2>
+        <dl class="timing">
+          {#each timing as [label, value] (label)}
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          {/each}
+        </dl>
+        <p class="hint">Début = premier point ou jeu saisi. Chaque set commence à la fin du précédent (pause comprise).</p>
+      </section>
+    {/if}
+
     {#if notesShown.length}
       <section class="card notes">
         <h2>Notes du coach ({notesShown.length})</h2>
@@ -170,16 +192,31 @@
       </section>
     {/if}
 
+    {#if showGames && g}
+      <section class="card">
+        <h2>Jeux</h2>
+        <CompareRow label="Jeux gagnés" a={String(g.A.gamesWon)} b={String(g.B.gamesWon)} va={g.A.gamesWon} vb={g.B.gamesWon} />
+        <CompareRow label="Jeux de service gagnés" a={frac(g.A.serviceGames)} b={frac(g.B.serviceGames)} va={n(g.A.serviceGames)} vb={n(g.B.serviceGames)} />
+        <CompareRow label="Breaks (jeux de retour gagnés)" a={frac(g.A.breaks)} b={frac(g.B.breaks)} va={g.A.breaks.won} vb={g.B.breaks.won} />
+        <CompareRow label="Plus longue série de jeux" a={String(g.A.longestStreak)} b={String(g.B.longestStreak)} va={g.A.longestStreak} vb={g.B.longestStreak} />
+        <p class="hint">{g.total} jeux suivis. Les jeux non suivis (score corrigé à la main) ne sont pas comptés.</p>
+      </section>
+      {#if s.totalPoints === 0}
+        <section class="card">
+          <h2>Momentum (par jeu)</h2>
+          <Momentum series={g.momentum} setStarts={g.setStarts} {names} />
+        </section>
+      {/if}
+    {/if}
+
     {#if s.totalPoints === 0}
-      <p class="empty">Aucun point saisi pour l'instant.</p>
+      {#if !showGames}<p class="empty">Aucun point ni jeu saisi pour l'instant.</p>{/if}
     {:else}
       <section class="card">
         <h2>Résumé</h2>
         <CompareRow label="Points gagnés" a={String(s.A.pointsWon)} b={String(s.B.pointsWon)} va={s.A.pointsWon} vb={s.B.pointsWon} />
         <CompareRow label="Plus longue série" a={String(s.A.longestStreak)} b={String(s.B.longestStreak)} va={s.A.longestStreak} vb={s.B.longestStreak} />
-        <p class="duration">
-          {s.totalPoints} points joués{s.durationMs && s.durationMs >= 60_000 ? ` · durée ${formatDuration(s.durationMs)}` : ''}
-        </p>
+        <p class="duration">{s.totalPoints} points saisis</p>
       </section>
 
       <section class="card">
@@ -357,6 +394,22 @@
     color: var(--bg);
     border-color: var(--text);
     font-weight: 600;
+  }
+  .timing {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 16px;
+    margin: 8px 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .timing dt {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .timing dd {
+    margin: 0;
+    font-weight: 600;
+    text-align: right;
   }
   .notes ol {
     list-style: none;

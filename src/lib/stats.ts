@@ -5,6 +5,7 @@
 import {
   other,
   type EndZone,
+  type GameRecord,
   type PointRecord,
   type RallyLength,
   type ServeZone,
@@ -250,15 +251,70 @@ export function computeStats(allPoints: readonly PointRecord[], setNumber?: numb
   };
 }
 
+// ---- Stats par jeu (toutes saisies, y compris le mode Jeux sans points) ----
+
+export interface GameSideStats {
+  gamesWon: number;
+  /** Jeux de service gagnés / joués (hors jeux décisifs). */
+  serviceGames: Ratio;
+  /** Jeux de retour gagnés (breaks) / joués. */
+  breaks: Ratio;
+  longestStreak: number;
+}
+
+export interface GameStats {
+  A: GameSideStats;
+  B: GameSideStats;
+  total: number;
+  /** Écart cumulé de jeux (A − B) après chaque jeu. */
+  momentum: number[];
+  setStarts: number[];
+  /** Au moins un jeu saisi sans le détail des points. */
+  hasGameOnly: boolean;
+}
+
+export function computeGameStats(all: readonly GameRecord[], setNumber?: number): GameStats {
+  const games = setNumber ? all.filter((g) => g.setNumber === setNumber) : all;
+  const side = (): GameSideStats => ({ gamesWon: 0, serviceGames: ratio(), breaks: ratio(), longestStreak: 0 });
+  const S: Record<Side, GameSideStats> = { A: side(), B: side() };
+  const momentum: number[] = [];
+  const setStarts: number[] = [];
+  let diff = 0;
+  let streakSide: Side | null = null;
+  let streak = 0;
+  games.forEach((g, i) => {
+    const w = g.winner;
+    S[w].gamesWon++;
+    if (!g.tiebreak) {
+      count(S[g.server].serviceGames, w === g.server);
+      count(S[other(g.server)].breaks, w !== g.server);
+    }
+    streak = w === streakSide ? streak + 1 : 1;
+    streakSide = w;
+    S[w].longestStreak = Math.max(S[w].longestStreak, streak);
+    if (i > 0 && g.setNumber !== games[i - 1].setNumber) setStarts.push(i);
+    diff += w === 'A' ? 1 : -1;
+    momentum.push(diff);
+  });
+  return { A: S.A, B: S.B, total: games.length, momentum, setStarts, hasGameOnly: games.some((g) => g.source === 'game') };
+}
+
+/** "14:05". */
+export function formatClock(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 /** "60 %" ou "–" si aucune donnée. */
 export const pct = (r: Ratio): string => (r.total ? `${Math.round((r.won / r.total) * 100)} %` : '–');
 
 /** "3/5" ou "–" si aucune donnée. */
 export const frac = (r: Ratio): string => (r.total ? `${r.won}/${r.total}` : '–');
 
-/** "1 h 05", "42 min". */
+/** "1 h 05", "42 min", "< 1 min". */
 export function formatDuration(ms: number): string {
   const min = Math.round(ms / 60000);
+  if (min < 1) return '< 1 min';
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }

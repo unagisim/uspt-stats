@@ -2,9 +2,9 @@
 
 import type { StoredMatch } from '../db';
 import { ENDING, END_ZONE, POSITION, RALLY, SERVE_OUTCOME, SERVE_ZONE, SHOT, SPIN } from '../labels';
-import { computeStats } from '../stats';
+import { computeGameStats, computeStats } from '../stats';
 import { formatTime, matchInfo } from './meta';
-import { noteRows, statRows } from './rows';
+import { noteRows, statRows, timingRows } from './rows';
 
 const BOM = '﻿';
 
@@ -66,19 +66,24 @@ export function pointsCsv(m: StoredMatch): string {
 export function statsCsv(m: StoredMatch): string {
   const info = matchInfo(m);
   const points = info.replay.points;
-  const sets = [...new Set(points.map((p) => p.setNumber))];
+  const games = info.replay.games;
+  const sets = [...new Set([...points.map((p) => p.setNumber), ...games.map((g) => g.setNumber)])].sort((a, b) => a - b);
   const rows: (string | number)[][] = [
     ['Match', info.title],
     ['Date', info.date],
     ['Score', info.score],
     ['Résultat', info.result],
+    ...timingRows(info.replay.timeline),
     [],
     ['Périmètre', 'Rubrique', 'Statistique', info.full.A, info.full.B],
   ];
   const scopes: [string, number | undefined][] = [['Match', undefined]];
   if (sets.length > 1) sets.forEach((k) => scopes.push([`Set ${k}`, k]));
   for (const [scope, k] of scopes) {
-    for (const r of statRows(computeStats(points, k))) rows.push([scope, r.section, r.label, r.a, r.b]);
+    const g = computeGameStats(games, k);
+    // Stats par jeu : si des jeux ont été saisis sans points, ou si aucun point n'a été saisi.
+    const withGames = g.hasGameOnly || points.length === 0 ? { ...g, hasGameOnly: true } : undefined;
+    for (const r of statRows(computeStats(points, k), withGames)) rows.push([scope, r.section, r.label, r.a, r.b]);
   }
 
   const notes = noteRows(info.replay.notes, points, info.short);

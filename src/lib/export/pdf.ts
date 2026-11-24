@@ -3,9 +3,9 @@
 import { jsPDF } from 'jspdf';
 import { autoTable, type RowInput } from 'jspdf-autotable';
 import type { StoredMatch } from '../db';
-import { computeStats, formatDuration, type MatchStats } from '../stats';
+import { computeGameStats, computeStats, type GameStats, type MatchStats } from '../stats';
 import { formatDate, matchInfo, type MatchInfo } from './meta';
-import { noteRows, statRows } from './rows';
+import { noteRows, statRows, timingRows } from './rows';
 
 type RGB = [number, number, number];
 // Couleurs de l'US Pontet Tennis (bleu marine et vert anis), en version lisible sur blanc.
@@ -29,10 +29,12 @@ function ensureSpace(doc: jsPDF, y: number, needed: number): number {
   return MARGIN;
 }
 
-function statsTable(doc: jsPDF, y: number, s: MatchStats, info: MatchInfo) {
+function statsTable(doc: jsPDF, y: number, s: MatchStats, info: MatchInfo, g?: GameStats) {
   const body: RowInput[] = [];
   let section = '';
-  for (const r of statRows(s)) {
+  const rows = statRows(s, g);
+  if (rows.length === 0) return y;
+  for (const r of rows) {
     if (r.section !== section) {
       section = r.section;
       body.push([{ content: section, colSpan: 3, styles: { fillColor: LIGHT, fontStyle: 'bold', halign: 'left' } }]);
@@ -57,7 +59,7 @@ function statsTable(doc: jsPDF, y: number, s: MatchStats, info: MatchInfo) {
   return lastY(doc);
 }
 
-function momentumChart(doc: jsPDF, y: number, s: MatchStats, info: MatchInfo): number {
+function momentumChart(doc: jsPDF, y: number, s: { momentum: number[]; setStarts: number[] }, info: MatchInfo): number {
   const h = 40;
   const series = [0, ...s.momentum];
   const max = Math.max(3, ...series.map(Math.abs));
@@ -90,6 +92,13 @@ function momentumChart(doc: jsPDF, y: number, s: MatchStats, info: MatchInfo): n
   return y + h;
 }
 
+/** Stats par jeu à afficher : si des jeux ont été saisis sans points, ou si aucun point n'a été saisi. */
+function withGames(g: GameStats, pointCount: number): GameStats | undefined {
+  if (g.total === 0) return undefined;
+  if (g.hasGameOnly) return g;
+  return pointCount === 0 ? { ...g, hasGameOnly: true } : undefined;
+}
+
 function heading(doc: jsPDF, y: number, text: string): number {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
@@ -117,26 +126,36 @@ export function buildMatchPdf(m: StoredMatch): { blob: Blob; fileName: string } 
   doc.text([info.date, ...info.details].join('  ·  '), MARGIN, y, { maxWidth: CONTENT_W });
   y += doc.splitTextToSize([info.date, ...info.details].join('  ·  '), CONTENT_W).length * 4.5 + 3;
 
-  // Score
+  // Score, horaires et durées
+  const all = computeStats(points);
+  const games = info.replay.games;
+  const allGames = computeGameStats(games);
+  const timing = timingRows(info.replay.timeline);
+  const main = timing.filter(([l]) => !l.startsWith('Durée du set')).map(([l, v]) => `${l.toLowerCase()} ${v}`);
+  const setLine = timing.filter(([l]) => l.startsWith('Durée du set')).map(([l, v]) => `${l.replace('Durée du s', 'S')} : ${v}`);
+  const boxH = setLine.length ? 21 : 16;
   doc.setFillColor(...LIGHT);
-  doc.roundedRect(MARGIN, y, CONTENT_W, 16, 2, 2, 'F');
+  doc.roundedRect(MARGIN, y, CONTENT_W, boxH, 2, 2, 'F');
   doc.setTextColor(21, 23, 26);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.text(info.score, MARGIN + 5, y + 7);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  const all = computeStats(points);
-  const extra = all.durationMs && all.durationMs >= 60_000 ? `  ·  durée ${formatDuration(all.durationMs)}` : '';
-  doc.text(`${info.result}  ·  ${all.totalPoints} points joués${extra}`, MARGIN + 5, y + 12.5);
-  y += 24;
+  const counted = all.totalPoints ? `${all.totalPoints} points saisis` : allGames.total ? `${allGames.total} jeux saisis` : '';
+  doc.text([info.result, counted, ...main].filter(Boolean).join('  ·  '), MARGIN + 5, y + 12.5);
+  if (setLine.length) doc.text(setLine.join('  ·  '), MARGIN + 5, y + 17.5);
+  y += boxH + 8;
 
-  if (points.length === 0) {
-    doc.text('Aucun point saisi.', MARGIN, y);
-    y += 10;
-  } else {
+  if (points.length > 0) {
     y = heading(doc, y, 'Momentum');
     y = momentumChart(doc, y, all, info) + 9;
+  } else if (allGames.total > 0) {
+    y = heading(doc, y, 'Momentum (par jeu)');
+    y = momentumChart(doc, y, allGames, info) + 9;
+  } else {
+    doc.text('Aucun point ni jeu saisi.', MARGIN, y);
+    y += 10;
   }
 
   const notes = noteRows(info.replay.notes, points, info.short);
@@ -156,17 +175,17 @@ export function buildMatchPdf(m: StoredMatch): { blob: Blob; fileName: string } 
     y = lastY(doc) + 9;
   }
 
-  if (points.length > 0) {
+  if (points.length > 0 || allGames.hasGameOnly || (allGames.total > 0 && points.length === 0)) {
     y = ensureSpace(doc, y, 40);
     y = heading(doc, y, 'Statistiques du match');
-    y = statsTable(doc, y, all, info) + 9;
+    y = statsTable(doc, y, all, info, withGames(allGames, points.length)) + 9;
 
-    const sets = [...new Set(points.map((p) => p.setNumber))];
+    const sets = [...new Set([...points.map((p) => p.setNumber), ...games.map((g) => g.setNumber)])].sort((a, b) => a - b);
     if (sets.length > 1) {
       for (const k of sets) {
         y = ensureSpace(doc, y, 40);
         y = heading(doc, y, `Set ${k}`);
-        y = statsTable(doc, y, computeStats(points, k), info) + 9;
+        y = statsTable(doc, y, computeStats(points, k), info, withGames(computeGameStats(games, k), points.length)) + 9;
       }
     }
   }

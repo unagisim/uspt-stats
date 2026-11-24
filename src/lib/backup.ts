@@ -46,7 +46,17 @@ const isEvent = (v: unknown) =>
   typeof v.ts === 'number' &&
   ((v.kind === 'point' && (v.winner === 'A' || v.winner === 'B')) ||
     (v.kind === 'incident' && typeof v.type === 'string') ||
-    (v.kind === 'note' && typeof v.text === 'string'));
+    (v.kind === 'note' && typeof v.text === 'string') ||
+    (v.kind === 'game' && (v.winner === 'A' || v.winner === 'B')) ||
+    (v.kind === 'adjust' &&
+      Array.isArray(v.sets) &&
+      v.sets.every(isPair) &&
+      isPair(v.games) &&
+      (v.server === 'A' || v.server === 'B')));
+
+function isPair(v: unknown): boolean {
+  return isObj(v) && Number.isInteger(v.A) && Number.isInteger(v.B) && (v.A as number) >= 0 && (v.B as number) >= 0;
+}
 
 /** Vérifie la forme d'un match importé (sans faire confiance au fichier). */
 export function isValidMatch(v: unknown): v is StoredMatch {

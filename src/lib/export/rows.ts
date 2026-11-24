@@ -43,7 +43,17 @@ export function tagCounts(notes: readonly NoteRecord[], side: Side): [string, nu
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => [NOTE_TAGS[t], c]);
 }
-import { frac, pct, type MatchStats, type Ratio, type ShotCount } from '../stats';
+import { span, type Timeline } from '../engine';
+import {
+  formatClock,
+  formatDuration,
+  frac,
+  pct,
+  type GameStats,
+  type MatchStats,
+  type Ratio,
+  type ShotCount,
+} from '../stats';
 
 /** Rubriques alimentées par les modes standard et expert. */
 export const SHOT_SECTION = 'Détail par type de coup';
@@ -80,11 +90,43 @@ export const shotsPlayed = (s: MatchStats): Shot[] =>
 export const shotSummary = (c?: ShotCount): string =>
   `G ${c?.winners ?? 0} · FP ${c?.forcedErrors ?? 0} · FD ${c?.unforcedErrors ?? 0}`;
 
-/** Mêmes règles d'affichage que l'écran de stats. */
-export function statRows(s: MatchStats): StatRow[] {
+/** Horaires du match (ou d'un set) : [libellé, valeur]. */
+export function timingRows(t: Timeline, setNumber?: number): [string, string][] {
+  const rows: [string, string][] = [];
+  if (t.start === null) return rows;
+  if (setNumber) {
+    const set = t.sets.find((x) => x.setNumber === setNumber);
+    if (!set || set.start === null) return rows;
+    rows.push(['Début du set', formatClock(set.start)]);
+    rows.push(['Fin du set', set.end !== null ? formatClock(set.end) : 'en cours']);
+    const d = span(set.start, set.end);
+    if (d !== null) rows.push(['Durée du set', formatDuration(d)]);
+    return rows;
+  }
+  rows.push(['Début', formatClock(t.start)]);
+  rows.push(['Fin', t.end !== null ? formatClock(t.end) : 'en cours']);
+  const d = span(t.start, t.end);
+  if (d !== null) rows.push(['Durée du match', formatDuration(d)]);
+  for (const set of t.sets) {
+    const sd = span(set.start, set.end);
+    rows.push([`Durée du set ${set.setNumber}`, sd !== null ? formatDuration(sd) : 'en cours']);
+  }
+  return rows;
+}
+
+/** Mêmes règles d'affichage que l'écran de stats. `g` : stats par jeu, ajoutées si des jeux ont été saisis sans les points. */
+export function statRows(s: MatchStats, g?: GameStats): StatRow[] {
   const rows: StatRow[] = [];
   const add = (section: string, label: string, a: string | number, b: string | number) =>
     rows.push({ section, label, a: String(a), b: String(b) });
+
+  if (g && g.total > 0 && g.hasGameOnly) {
+    add('Jeux', 'Jeux gagnés', g.A.gamesWon, g.B.gamesWon);
+    add('Jeux', 'Jeux de service gagnés', frac(g.A.serviceGames), frac(g.B.serviceGames));
+    add('Jeux', 'Breaks (jeux de retour gagnés)', frac(g.A.breaks), frac(g.B.breaks));
+    add('Jeux', 'Plus longue série de jeux', g.A.longestStreak, g.B.longestStreak);
+  }
+  if (s.totalPoints === 0) return rows;
 
   add('Résumé', 'Points gagnés', s.A.pointsWon, s.B.pointsWon);
   add('Résumé', 'Plus longue série de points', s.A.longestStreak, s.B.longestStreak);

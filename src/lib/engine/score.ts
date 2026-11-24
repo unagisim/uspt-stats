@@ -89,10 +89,42 @@ export interface NoteRecord {
   matchOver: boolean;
 }
 
+/** Jeu terminé, quelle que soit la façon dont il a été saisi. */
+export interface GameRecord {
+  eventIndex: number;
+  ts: number;
+  winner: Side;
+  /** Serveur du jeu (ou premier serveur du jeu décisif). */
+  server: Side;
+  setNumber: number;
+  tiebreak: boolean;
+  /** Saisi point par point, d'un seul tap (mode Jeux) ou attribué par pénalité. */
+  source: 'points' | 'game' | 'penalty';
+}
+
+export interface SetTiming {
+  setNumber: number;
+  start: number | null;
+  /** null tant que le set est en cours. */
+  end: number | null;
+}
+
+/**
+ * Horaires du match : début = premier score saisi, fin = dernier point du match.
+ * Chaque set commence à la fin du précédent (pauses comprises).
+ */
+export interface Timeline {
+  start: number | null;
+  end: number | null;
+  sets: SetTiming[];
+}
+
 export interface ReplayResult {
   state: ScoreState;
   points: PointRecord[];
   notes: NoteRecord[];
+  games: GameRecord[];
+  timeline: Timeline;
 }
 
 const zero = (): Pair => ({ A: 0, B: 0 });
@@ -192,9 +224,60 @@ function finishGame(n: ScoreState, config: MatchConfig, w: Side): void {
 }
 
 function finishTiebreak(n: ScoreState, config: MatchConfig, w: Side): void {
-  const tb = { ...n.points };
+  // Jeu décisif attribué sans les points (mode Jeux, pénalité) : score du jeu décisif inconnu.
+  const tb = n.points.A + n.points.B > 0 ? { ...n.points } : undefined;
   if (!n.isSuperTiebreakSet) n.games[w]++;
   finishSet(n, config, w, tb);
+}
+
+export interface ScoreAdjustment {
+  /** Sets terminés, dans l'ordre (un super jeu décisif gagné s'écrit 1-0 ou 0-1). */
+  sets: Pair[];
+  /** Jeux du set en cours. */
+  games: Pair;
+  /** Joueur au service au prochain jeu. */
+  server: Side;
+}
+
+/** Remplace le score par un score saisi à la main (correction après une absence, une erreur…). */
+export function adjustScore(s: ScoreState, config: MatchConfig, adj: ScoreAdjustment): ScoreState {
+  const fmt = config.format;
+  const n = clone(s);
+  n.completedSets = adj.sets.map((g, i) => {
+    const superSet =
+      fmt.finalSetSuperTiebreak && i === fmt.setsToWin * 2 - 2 && g.A + g.B === 1;
+    return superSet ? { games: { ...g }, superTiebreak: true } : { games: { ...g } };
+  });
+  n.setsWon = { A: 0, B: 0 };
+  for (const set of n.completedSets) n.setsWon[set.games.A > set.games.B ? 'A' : 'B']++;
+  n.games = { ...adj.games };
+  n.points = zero();
+  n.gameServer = adj.server;
+  n.server = adj.server;
+  n.changeEnds = false;
+  n.inTiebreak = false;
+  n.isSuperTiebreakSet = false;
+  n.tiebreakTarget = fmt.tiebreakPoints;
+  n.winner = null;
+  n.endReason = null;
+
+  const leader = n.setsWon.A >= fmt.setsToWin ? 'A' : n.setsWon.B >= fmt.setsToWin ? 'B' : null;
+  if (leader) {
+    n.winner = leader;
+    n.endReason = 'completed';
+    n.games = zero();
+    return n;
+  }
+  const decider = fmt.setsToWin - 1;
+  if (fmt.finalSetSuperTiebreak && n.setsWon.A === decider && n.setsWon.B === decider) {
+    n.inTiebreak = true;
+    n.isSuperTiebreakSet = true;
+    n.tiebreakTarget = fmt.superTiebreakPoints;
+    n.games = zero();
+  } else if (n.games.A === fmt.tiebreakAt && n.games.B === fmt.tiebreakAt) {
+    n.inTiebreak = true;
+  }
+  return n;
 }
 
 /** Applique un point gagné par `w`. Renvoie un nouvel état (l'état d'origine n'est pas modifié). */
@@ -284,6 +367,7 @@ export function formatPoints(s: ScoreState): { A: string; B: string } {
 export function setsSummary(s: ScoreState): string[] {
   return s.completedSets.map((set) => {
     if (set.superTiebreak && set.tiebreak) return `[${set.tiebreak.A}-${set.tiebreak.B}]`;
+    if (set.superTiebreak) return `[${set.games.A}-${set.games.B}]`;
     const base = `${set.games.A}-${set.games.B}`;
     if (set.tiebreak) return `${base} (${Math.min(set.tiebreak.A, set.tiebreak.B)})`;
     return base;
@@ -295,6 +379,32 @@ export function replay(config: MatchConfig, events: readonly MatchEvent[]): Repl
   let s = initialState(config);
   const points: PointRecord[] = [];
   const notes: NoteRecord[] = [];
+  const games: GameRecord[] = [];
+  let start: number | null = null;
+  let end: number | null = null;
+  const setEnds: number[] = [];
+
+  /** Après chaque événement qui touche au score : jeux gagnés, fins de set et de match. */
+  const track = (i: number, ts: number, before: ScoreState, source: GameRecord['source']) => {
+    start ??= ts;
+    for (const side of ['A', 'B'] as const) {
+      if (gameWon(before, s, side)) {
+        games.push({
+          eventIndex: i,
+          ts,
+          winner: side,
+          server: before.gameServer,
+          setNumber: before.completedSets.length + 1,
+          tiebreak: before.inTiebreak,
+          source,
+        });
+      }
+    }
+    // Une correction peut ajouter ou retirer des sets : on garde une fin par set terminé.
+    setEnds.length = Math.min(setEnds.length, s.completedSets.length);
+    while (setEnds.length < s.completedSets.length) setEnds.push(ts);
+    if (s.winner && !before.winner) end = ts;
+  };
 
   events.forEach((e, i) => {
     // Les notes sont gardées même après la fin du match (commentaires d'après-match).
@@ -336,24 +446,62 @@ export function replay(config: MatchConfig, events: readonly MatchEvent[]): Repl
         ts: e.ts,
         ...(e.details ? { details: e.details } : {}),
       });
+      track(i, e.ts, before, 'points');
+      return;
+    }
+    if (e.kind === 'game') {
+      const before = s;
+      s = awardGame(s, config, e.winner);
+      track(i, e.ts, before, 'game');
+      return;
+    }
+    if (e.kind === 'adjust') {
+      const before = s;
+      s = adjustScore(s, config, e);
+      // Pas d'enregistrement de jeux : on ne sait pas qui a gagné les jeux manqués.
+      start ??= e.ts;
+      setEnds.length = Math.min(setEnds.length, s.completedSets.length);
+      while (setEnds.length < s.completedSets.length) setEnds.push(e.ts);
+      if (s.winner && !before.winner) end = e.ts;
       return;
     }
     if (!e.player) return;
+    const before = s;
     switch (e.type) {
       case 'point_penalty':
         s = applyPoint(s, config, other(e.player));
+        track(i, e.ts, before, 'penalty');
         break;
       case 'game_penalty':
         s = awardGame(s, config, other(e.player));
+        track(i, e.ts, before, 'penalty');
         break;
       case 'retirement':
       case 'walkover':
         s = endMatch(s, e.player, e.type);
+        start ??= e.ts;
+        end = e.ts;
         break;
       default:
         break;
     }
   });
 
-  return { state: s, points, notes };
+  return { state: s, points, notes, games, timeline: buildTimeline(start, end, setEnds, s) };
 }
+
+function buildTimeline(start: number | null, end: number | null, setEnds: number[], s: ScoreState): Timeline {
+  const sets: SetTiming[] = setEnds.map((e, i) => ({
+    setNumber: i + 1,
+    start: i === 0 ? start : setEnds[i - 1],
+    end: e,
+  }));
+  if (!s.winner && start !== null) {
+    sets.push({ setNumber: setEnds.length + 1, start: setEnds.length ? setEnds[setEnds.length - 1] : start, end: null });
+  }
+  return { start, end, sets };
+}
+
+/** Durée en ms entre deux instants, ou null si l'un manque. */
+export const span = (from: number | null, to: number | null): number | null =>
+  from !== null && to !== null ? Math.max(0, to - from) : null;

@@ -286,6 +286,109 @@ describe('notes du coach', () => {
   });
 });
 
+describe('mode Jeux : jeux saisis d’un seul tap', () => {
+  const g = (seq: string, t0 = 0): MatchEvent[] =>
+    [...seq].map((c, i) => ({ kind: 'game' as const, winner: c as Side, ts: t0 + i * 300_000 }));
+
+  it('un jeu par événement, le service alterne', () => {
+    const { state, games } = replay(cfg(), g('AAB'));
+    expect(state.games).toEqual({ A: 2, B: 1 });
+    expect(state.server).toBe('B');
+    expect(games.map((x) => [x.winner, x.server, x.source])).toEqual([
+      ['A', 'A', 'game'],
+      ['A', 'B', 'game'],
+      ['B', 'A', 'game'],
+    ]);
+  });
+
+  it('jeu décisif attribué sans le score du jeu décisif', () => {
+    const { state } = replay(cfg(), g('AB'.repeat(6) + 'B'));
+    expect(state.completedSets[0]).toEqual({ games: { A: 6, B: 7 } });
+    expect(setsSummary(state)).toEqual(['6-7']);
+  });
+
+  it('super jeu décisif attribué : noté [1-0]', () => {
+    const { state } = replay(cfg('FFT2'), g('AAAAAA' + 'BBBBBB' + 'A'));
+    expect(state.winner).toBe('A');
+    expect(setsSummary(state)).toEqual(['6-0', '0-6', '[1-0]']);
+  });
+
+  it('mélange avec la saisie point par point', () => {
+    const { state, games } = replay(cfg(), [...pts('AAAA'), ...g('B')]);
+    expect(state.games).toEqual({ A: 1, B: 1 });
+    expect(games.map((x) => x.source)).toEqual(['points', 'game']);
+  });
+});
+
+describe('correction du score', () => {
+  const adjust = (sets: { A: number; B: number }[], games: { A: number; B: number }, server: Side): MatchEvent => ({
+    kind: 'adjust',
+    ts: 0,
+    sets,
+    games,
+    server,
+  });
+
+  it('remplace le score courant', () => {
+    const { state } = replay(cfg(), [...pts('AAAA'), adjust([{ A: 6, B: 4 }], { A: 2, B: 3 }, 'B')]);
+    expect(state.completedSets).toEqual([{ games: { A: 6, B: 4 } }]);
+    expect(state.setsWon).toEqual({ A: 1, B: 0 });
+    expect(state.games).toEqual({ A: 2, B: 3 });
+    expect(state.server).toBe('B');
+    expect(state.points).toEqual({ A: 0, B: 0 });
+  });
+
+  it('la saisie reprend normalement après la correction', () => {
+    const { state } = replay(cfg(), [adjust([], { A: 5, B: 4 }, 'A'), ...pts('AAAA')]);
+    expect(state.completedSets).toEqual([{ games: { A: 6, B: 4 } }]);
+  });
+
+  it('6/6 corrigé : jeu décisif en cours', () => {
+    expect(replay(cfg(), [adjust([], { A: 6, B: 6 }, 'A')]).state.inTiebreak).toBe(true);
+  });
+
+  it('1 set partout en format 2 : super jeu décisif', () => {
+    const s = replay(cfg('FFT2'), [adjust([{ A: 6, B: 3 }, { A: 4, B: 6 }], { A: 0, B: 0 }, 'A')]).state;
+    expect(s.isSuperTiebreakSet).toBe(true);
+    expect(s.tiebreakTarget).toBe(10);
+  });
+
+  it('score final saisi : match terminé', () => {
+    const s = replay(cfg(), [adjust([{ A: 6, B: 3 }, { A: 7, B: 5 }], { A: 0, B: 0 }, 'A')]).state;
+    expect(s.winner).toBe('A');
+  });
+});
+
+describe('horaires', () => {
+  const at = (min: number) => new Date(2026, 10, 24, 14, min).getTime();
+  const gAt = (winner: Side, min: number): MatchEvent => ({ kind: 'game', winner, ts: at(min) });
+
+  it('début, fin du match et durée de chaque set', () => {
+    const events = [
+      ...[...'AAAAAA'].map((w, i) => gAt(w as Side, 2 + i * 5)), // set 1 : 14:02 → 14:27
+      ...[...'AAAAAA'].map((w, i) => gAt(w as Side, 32 + i * 5)), // set 2 : → 14:57
+    ];
+    const { timeline } = replay(cfg(), events);
+    expect(timeline.start).toBe(at(2));
+    expect(timeline.end).toBe(at(57));
+    expect(timeline.sets).toEqual([
+      { setNumber: 1, start: at(2), end: at(27) },
+      { setNumber: 2, start: at(27), end: at(57) },
+    ]);
+  });
+
+  it('match en cours : set courant sans fin', () => {
+    const { timeline } = replay(cfg(), [gAt('A', 0), gAt('B', 5)]);
+    expect(timeline.end).toBeNull();
+    expect(timeline.sets).toEqual([{ setNumber: 1, start: at(0), end: null }]);
+  });
+
+  it('les notes ne comptent pas dans les horaires', () => {
+    const { timeline } = replay(cfg(), [{ kind: 'note', ts: at(0), text: 'Échauffement' }, gAt('A', 10)]);
+    expect(timeline.start).toBe(at(10));
+  });
+});
+
 describe('annulation', () => {
   it('retirer le dernier événement revient à l’état précédent', () => {
     const events = pts(toSixAll + 'AAAAAAA');

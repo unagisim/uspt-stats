@@ -12,6 +12,11 @@
   } from '../lib/db';
 
   const MODES: { id: InputMode; label: string; description: string }[] = [
+    {
+      id: 'games',
+      label: 'Jeux',
+      description: 'Un tap par jeu gagné, score corrigeable : pour se concentrer sur les notes. Peu de stats.',
+    },
     { id: 'quick', label: 'Rapide', description: 'Un tap par point : gagnant, ace, double faute.' },
     { id: 'standard', label: 'Standard', description: '2 à 4 taps : 1re/2e balle, fin du point et coup.' },
     { id: 'expert', label: 'Expert', description: 'En plus : zones, effet, position, longueur de l’échange.' },
