@@ -3,6 +3,7 @@
 
 import Dexie, { type EntityTable } from 'dexie';
 import { FORMATS, type FormatId, type MatchConfig, type MatchEvent, type Side } from './engine';
+import { fullName, splitName } from './names';
 
 export interface Player {
   id?: number;
@@ -72,16 +73,11 @@ export const configOf = (m: StoredMatch): MatchConfig => ({
   letEnabled: m.letEnabled,
 });
 
-export const fullName = (p: { prenom: string; nom: string }) => `${p.prenom} ${p.nom}`.trim();
+export { fullName, shortName, splitName } from './names';
 
-/** Nom court pour l'affichage pendant le match. */
-export const shortName = (p: { prenom: string; nom: string }) => p.nom || p.prenom;
-
-/** "Léo Martin" -> prénom "Léo", nom "Martin". Un seul mot est pris comme nom. */
-export function splitName(input: string): { prenom: string; nom: string } {
-  const parts = input.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { prenom: '', nom: parts[0] ?? '' };
-  return { prenom: parts[0], nom: parts.slice(1).join(' ') };
+/** Supprime définitivement un match de l'appareil. */
+export async function deleteMatch(id: string): Promise<void> {
+  await db.matches.delete(id);
 }
 
 /** Retrouve un joueur par son nom complet (sans tenir compte de la casse) ou le crée. */

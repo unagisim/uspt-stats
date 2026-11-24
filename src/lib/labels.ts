@@ -72,6 +72,14 @@ export const RALLY: Record<RallyLength, string> = {
   '9+': '9 coups et plus',
 };
 
+export const SURFACE_LABELS: Record<string, string> = {
+  dur: 'Dur',
+  terre: 'Terre battue',
+  gazon: 'Gazon',
+  moquette: 'Moquette',
+  synthetique: 'Gazon synthétique',
+};
+
 export const INCIDENTS: Record<IncidentType, string> = {
   warning: 'Avertissement',
   point_penalty: 'Pénalité de point',

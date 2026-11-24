@@ -53,7 +53,7 @@ describe('CSV des points', () => {
 
   it('une ligne par point, avec libellés français', () => {
     expect(rows).toHaveLength(6);
-    expect(rows[1].split(';').slice(0, 9)).toEqual(['1', '14:30:00', '1', '1', '0-0', '0-0', '', 'Martin', 'Martin']);
+    expect(rows[1].split(';').slice(0, 9)).toEqual(['1', '14:30:00', '1', '1', '0-0', '0-0', '', 'L. Martin', 'L. Martin']);
     expect(rows[1]).toContain(';Ace;');
     expect(rows[5]).toContain('"revers; long"');
   });

@@ -2,14 +2,9 @@
 
 import type { StoredMatch } from '../db';
 import { FORMATS, replay, setsSummary, type ReplayResult } from '../engine';
+import { fullName, shortName } from '../names';
 
-const SURFACES: Record<string, string> = {
-  dur: 'Dur',
-  terre: 'Terre battue',
-  gazon: 'Gazon',
-  moquette: 'Moquette',
-  synthetique: 'Gazon synthétique',
-};
+import { SURFACE_LABELS as SURFACES } from '../labels';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -28,7 +23,7 @@ const isoDate = (ts: number) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-const name = (p: { prenom: string; nom: string }) => `${p.prenom} ${p.nom}`.trim();
+const name = fullName;
 
 /** Sans accents ni caractères spéciaux, pour les noms de fichiers. */
 const slug = (s: string) =>
@@ -55,7 +50,8 @@ export function matchInfo(m: StoredMatch): MatchInfo {
   const format = FORMATS[m.formatId];
   const r = replay({ format, firstServer: m.firstServer, letEnabled: m.letEnabled }, m.events);
   const full = { A: name(m.players.A), B: name(m.players.B) };
-  const short = { A: m.players.A.nom || m.players.A.prenom, B: m.players.B.nom || m.players.B.prenom };
+  const short = { A: shortName(m.players.A), B: shortName(m.players.B) };
+  const fileNames = { A: m.players.A.nom || m.players.A.prenom, B: m.players.B.nom || m.players.B.prenom };
 
   const details: string[] = [];
   if (m.context.tournoi) details.push(m.context.tournoi + (m.context.tour ? ` (${m.context.tour})` : ''));
@@ -83,6 +79,6 @@ export function matchInfo(m: StoredMatch): MatchInfo {
     details,
     score: parts.join('  ') || '–',
     result,
-    fileBase: `match_${slug(short.A)}-${slug(short.B)}_${isoDate(m.createdAt)}`,
+    fileBase: `match_${slug(fileNames.A)}-${slug(fileNames.B)}_${isoDate(m.createdAt)}`,
   };
 }
