@@ -6,9 +6,19 @@
     va = undefined,
     vb = undefined,
     lowerIsBetter = false,
-  }: { label: string; a: string; b: string; va?: number; vb?: number; lowerIsBetter?: boolean } = $props();
+    showBar = true,
+  }: {
+    label: string;
+    a: string;
+    b: string;
+    va?: number;
+    vb?: number;
+    lowerIsBetter?: boolean;
+    /** false pour une valeur qui peut être négative (pas de barre de répartition). */
+    showBar?: boolean;
+  } = $props();
 
-  const hasBar = $derived(va !== undefined && vb !== undefined && va + vb > 0);
+  const hasBar = $derived(showBar && va !== undefined && vb !== undefined && va >= 0 && vb >= 0 && va + vb > 0);
   const share = $derived(hasBar ? (va! / (va! + vb!)) * 100 : 50);
   // Valeur en gras = la meilleure des deux (la plus basse pour les fautes).
   const lead = $derived(

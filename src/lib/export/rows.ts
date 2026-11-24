@@ -43,11 +43,13 @@ export function tagCounts(notes: readonly NoteRecord[], side: Side): [string, nu
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => [NOTE_TAGS[t], c]);
 }
-import { frac, pct, type MatchStats, type Ratio } from '../stats';
+import { frac, pct, type MatchStats, type Ratio, type ShotCount } from '../stats';
 
 /** Rubriques alimentées par les modes standard et expert. */
+export const SHOT_SECTION = 'Détail par type de coup';
+
 export const DETAIL_SECTIONS = [
-  'Coups gagnants / fautes directes',
+  SHOT_SECTION,
   'Longueur des échanges',
   'Service par zone',
   'Jeu au filet',
@@ -62,6 +64,20 @@ export interface StatRow {
 }
 
 const withPct = (r: Ratio) => (r.total ? `${frac(r)} (${pct(r)})` : '–');
+
+/** Coups gagnants moins fautes directes, signé : "+4", "−2", "0". */
+export function balance(p: { winners: number; unforcedErrors: number }): string {
+  const d = p.winners - p.unforcedErrors;
+  return d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0';
+}
+
+/** Types de coup ayant terminé au moins un point, dans l'ordre habituel. */
+export const shotsPlayed = (s: MatchStats): Shot[] =>
+  (Object.keys(SHOT) as Shot[]).filter((k) => s.A.byShot[k] || s.B.byShot[k]);
+
+/** "G 3 · FP 1 · FD 2" (coups gagnants, fautes provoquées, fautes directes). */
+export const shotSummary = (c?: ShotCount): string =>
+  `G ${c?.winners ?? 0} · FP ${c?.forcedErrors ?? 0} · FD ${c?.unforcedErrors ?? 0}`;
 
 /** Mêmes règles d'affichage que l'écran de stats. */
 export function statRows(s: MatchStats): StatRow[] {
@@ -102,18 +118,15 @@ export function statRows(s: MatchStats): StatRow[] {
 
   if (s.hasEndingDetail) {
     add('Fin des points', 'Coups gagnants', s.A.winners, s.B.winners);
-    add('Fin des points', 'Fautes directes', s.A.unforcedErrors, s.B.unforcedErrors);
     add('Fin des points', 'Fautes provoquées', s.A.forcedErrors, s.B.forcedErrors);
+    add('Fin des points', 'Fautes directes', s.A.unforcedErrors, s.B.unforcedErrors);
+    add('Fin des points', 'Bilan coups gagnants − fautes directes', balance(s.A), balance(s.B));
   }
 
   const [shots, rally, serve, net, zones] = DETAIL_SECTIONS;
   if (s.hasShotDetail) {
-    for (const k of Object.keys(SHOT) as Shot[]) {
-      const a = s.A.byShot[k];
-      const b = s.B.byShot[k];
-      if (!a && !b) continue;
-      const fmt = (c = { winners: 0, unforcedErrors: 0 }) => `${c.winners} / ${c.unforcedErrors}`;
-      add(shots, SHOT[k], fmt(a), fmt(b));
+    for (const k of shotsPlayed(s)) {
+      add(shots, SHOT[k], shotSummary(s.A.byShot[k]), shotSummary(s.B.byShot[k]));
     }
   }
   if (s.hasRallyDetail) {

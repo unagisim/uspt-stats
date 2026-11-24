@@ -5,7 +5,17 @@
   import { configOf, db, exportMatch, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
-  import { DETAIL_SECTIONS, noteRows, statRows, tagCounts, type StatRow } from '../lib/export/rows';
+  import ShotTable from '../components/ShotTable.svelte';
+  import {
+    balance,
+    DETAIL_SECTIONS,
+    noteRows,
+    SHOT_SECTION,
+    shotsPlayed,
+    statRows,
+    tagCounts,
+    type StatRow,
+  } from '../lib/export/rows';
 
   let { id, onBack }: { id: string; onBack: () => void } = $props();
 
@@ -213,17 +223,33 @@
         <section class="card">
           <h2>Fin des points</h2>
           <CompareRow label="Coups gagnants" a={String(s.A.winners)} b={String(s.B.winners)} va={s.A.winners} vb={s.B.winners} />
-          <CompareRow label="Fautes directes" a={String(s.A.unforcedErrors)} b={String(s.B.unforcedErrors)} va={s.A.unforcedErrors} vb={s.B.unforcedErrors} lowerIsBetter />
           <CompareRow label="Fautes provoquées" a={String(s.A.forcedErrors)} b={String(s.B.forcedErrors)} va={s.A.forcedErrors} vb={s.B.forcedErrors} lowerIsBetter />
+          <CompareRow label="Fautes directes" a={String(s.A.unforcedErrors)} b={String(s.B.unforcedErrors)} va={s.A.unforcedErrors} vb={s.B.unforcedErrors} lowerIsBetter />
+          <CompareRow
+            label="Bilan coups gagnants − fautes directes"
+            a={balance(s.A)}
+            b={balance(s.B)}
+            va={s.A.winners - s.A.unforcedErrors}
+            vb={s.B.winners - s.B.unforcedErrors}
+            showBar={false}
+          />
+          <p class="hint">
+            Coups gagnants réussis par le joueur ; fautes provoquées et fautes directes commises par le joueur. Les aces
+            et doubles fautes sont comptés à part, dans « Service ».
+          </p>
         </section>
       {/if}
 
       {#each detail as [section, rows] (section)}
         <section class="card">
           <h2>{section}</h2>
-          {#each rows as r (r.label)}
-            <CompareRow label={r.label} a={r.a} b={r.b} />
-          {/each}
+          {#if section === SHOT_SECTION}
+            <ShotTable shots={shotsPlayed(s)} a={s.A.byShot} b={s.B.byShot} {names} />
+          {:else}
+            {#each rows as r (r.label)}
+              <CompareRow label={r.label} a={r.a} b={r.b} />
+            {/each}
+          {/if}
         </section>
       {/each}
     {/if}

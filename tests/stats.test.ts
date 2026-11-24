@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS, replay, type MatchConfig, type MatchEvent, type PointDetails, type Side } from '../src/lib/engine';
 import { computeStats, formatDuration, frac, pct } from '../src/lib/stats';
+import { balance, shotsPlayed, statRows } from '../src/lib/export/rows';
 
 const cfg: MatchConfig = { format: FORMATS.FFT2, firstServer: 'A', letEnabled: false };
 
@@ -122,6 +123,42 @@ describe('stats du mode expert', () => {
     expect(s.B.netPoints).toEqual({ won: 1, total: 2 });
     expect(s.A.winnerZones).toEqual({ right_deep: 1 });
     expect(s.hasZoneDetail).toBe(true);
+  });
+});
+
+describe('lignes « fin des points » et détail par coup', () => {
+  const s = stats([
+    p('A', { ending: 'winner', shot: 'forehand' }),
+    p('A', { ending: 'winner', shot: 'forehand' }),
+    p('A', { ending: 'forced_error', shot: 'backhand' }),
+    p('B', { ending: 'unforced_error', shot: 'forehand' }),
+    p('B', { ending: 'unforced_error', shot: 'volley' }),
+    p('B', { ending: 'unforced_error', shot: 'volley' }),
+  ]);
+  const rows = statRows(s);
+
+  it('totaux dans l’ordre coups gagnants, fautes provoquées, fautes directes, bilan', () => {
+    expect(rows.filter((r) => r.section === 'Fin des points')).toEqual([
+      { section: 'Fin des points', label: 'Coups gagnants', a: '2', b: '0' },
+      { section: 'Fin des points', label: 'Fautes provoquées', a: '0', b: '1' },
+      { section: 'Fin des points', label: 'Fautes directes', a: '3', b: '0' },
+      { section: 'Fin des points', label: 'Bilan coups gagnants − fautes directes', a: '−1', b: '0' },
+    ]);
+  });
+
+  it('détail par type de coup avec les trois catégories', () => {
+    expect(shotsPlayed(s)).toEqual(['forehand', 'backhand', 'volley']);
+    expect(rows.filter((r) => r.section === 'Détail par type de coup')).toEqual([
+      { section: 'Détail par type de coup', label: 'Coup droit', a: 'G 2 · FP 0 · FD 1', b: 'G 0 · FP 0 · FD 0' },
+      { section: 'Détail par type de coup', label: 'Revers', a: 'G 0 · FP 0 · FD 0', b: 'G 0 · FP 1 · FD 0' },
+      { section: 'Détail par type de coup', label: 'Volée', a: 'G 0 · FP 0 · FD 2', b: 'G 0 · FP 0 · FD 0' },
+    ]);
+  });
+
+  it('bilan signé', () => {
+    expect(balance({ winners: 5, unforcedErrors: 1 })).toBe('+4');
+    expect(balance({ winners: 1, unforcedErrors: 3 })).toBe('−2');
+    expect(balance({ winners: 2, unforcedErrors: 2 })).toBe('0');
   });
 });
 
