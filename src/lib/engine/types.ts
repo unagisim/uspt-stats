@@ -152,4 +152,10 @@ export interface AdjustEvent {
   server: Side;
 }
 
-export type MatchEvent = PointEvent | IncidentEvent | NoteEvent | GameEvent | AdjustEvent;
+/** Début du match (bouton « Démarrer le match ») : heure exacte du premier point. */
+export interface StartEvent {
+  kind: 'start';
+  ts: number;
+}
+
+export type MatchEvent = PointEvent | IncidentEvent | NoteEvent | GameEvent | AdjustEvent | StartEvent;

@@ -7,6 +7,7 @@
   import Scoreboard from '../components/Scoreboard.svelte';
   import { configOf, db, shortName, type InputMode, type StoredMatch } from '../lib/db';
   import { describePoint, INCIDENTS, NOTE_TAGS, noteMoment } from '../lib/labels';
+  import { formatClock } from '../lib/stats';
   import {
     formatPoints,
     other,
@@ -170,12 +171,18 @@
       return `Note${e.player ? ` ${names[e.player]}` : ''} : ${what}`;
     }
     if (e.kind === 'game') return `Jeu ${names[e.winner]}`;
+    if (e.kind === 'start') return `Match démarré à ${formatClock(e.ts)}`;
     if (e.kind === 'adjust') {
       const parts = [...e.sets, ...(e.games.A || e.games.B ? [e.games] : [])].map((g) => `${g.A}-${g.B}`);
       return `Score corrigé : ${parts.join(' ') || '0-0'}`;
     }
     return describePoint(e.winner, e.details, names);
   }
+
+  // ---- Début du match ----
+  /** Aucun début ni score enregistré : le bouton « Démarrer le match » est proposé. */
+  const notStarted = $derived(!!result && result.timeline.start === null && !result.state.winner);
+  const startMatch = () => record({ kind: 'start', ts: Date.now() });
 
   // ---- Mode Jeux et correction du score ----
   const game = (w: Side) => {
@@ -289,6 +296,13 @@
         {/if}
         <button class="ghost close" onclick={closeMenu}>Fermer</button>
       </section>
+    {/if}
+
+    {#if notStarted && !noteOpen && !fixOpen}
+      <div class="start">
+        <button class="primary" onclick={startMatch}>▶ Démarrer le match</button>
+        <span>Enregistre l'heure exacte du début. Vous pouvez aussi saisir directement le premier point.</span>
+      </div>
     {/if}
 
     {#if noteOpen}
@@ -433,6 +447,19 @@
   .wide {
     width: 100%;
     margin-bottom: 12px;
+  }
+  .start {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .start button {
+    flex: none;
+    min-height: 52px;
+  }
+  .start span {
+    font-size: 12px;
+    color: var(--muted);
   }
   .modes .on {
     background: var(--text);

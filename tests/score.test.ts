@@ -383,6 +383,17 @@ describe('horaires', () => {
     expect(timeline.sets).toEqual([{ setNumber: 1, start: at(0), end: null }]);
   });
 
+  it('bouton « Démarrer le match » : heure exacte du début', () => {
+    const { timeline, state } = replay(cfg(), [{ kind: 'start', ts: at(0) }, gAt('A', 6)]);
+    expect(timeline.start).toBe(at(0));
+    expect(timeline.sets[0].start).toBe(at(0));
+    expect(state.games).toEqual({ A: 1, B: 0 });
+  });
+
+  it('un début saisi après le premier score est ignoré', () => {
+    expect(replay(cfg(), [gAt('A', 6), { kind: 'start', ts: at(10) }]).timeline.start).toBe(at(6));
+  });
+
   it('les notes ne comptent pas dans les horaires', () => {
     const { timeline } = replay(cfg(), [{ kind: 'note', ts: at(0), text: 'Échauffement' }, gAt('A', 10)]);
     expect(timeline.start).toBe(at(10));

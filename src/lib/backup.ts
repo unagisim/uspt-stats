@@ -48,6 +48,7 @@ const isEvent = (v: unknown) =>
     (v.kind === 'incident' && typeof v.type === 'string') ||
     (v.kind === 'note' && typeof v.text === 'string') ||
     (v.kind === 'game' && (v.winner === 'A' || v.winner === 'B')) ||
+    v.kind === 'start' ||
     (v.kind === 'adjust' &&
       Array.isArray(v.sets) &&
       v.sets.every(isPair) &&

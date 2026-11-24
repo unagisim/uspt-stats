@@ -161,7 +161,10 @@
             <dd>{value}</dd>
           {/each}
         </dl>
-        <p class="hint">Début = premier point ou jeu saisi. Chaque set commence à la fin du précédent (pause comprise).</p>
+        <p class="hint">
+          Début = bouton « Démarrer le match », sinon premier point ou jeu saisi. Chaque set commence à la fin du précédent
+          (pause comprise).
+        </p>
       </section>
     {/if}
 

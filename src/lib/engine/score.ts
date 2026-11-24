@@ -110,7 +110,8 @@ export interface SetTiming {
 }
 
 /**
- * Horaires du match : début = premier score saisi, fin = dernier point du match.
+ * Horaires du match : début = bouton « Démarrer le match » s'il a été utilisé, sinon premier
+ * score saisi ; fin = dernier point du match.
  * Chaque set commence à la fin du précédent (pauses comprises).
  */
 export interface Timeline {
@@ -407,6 +408,11 @@ export function replay(config: MatchConfig, events: readonly MatchEvent[]): Repl
   };
 
   events.forEach((e, i) => {
+    // Heure de début exacte, si elle est donnée avant le premier score.
+    if (e.kind === 'start') {
+      start ??= e.ts;
+      return;
+    }
     // Les notes sont gardées même après la fin du match (commentaires d'après-match).
     if (e.kind === 'note') {
       const over = s.winner !== null;
