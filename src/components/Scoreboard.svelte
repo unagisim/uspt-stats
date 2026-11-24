@@ -61,8 +61,8 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: #c8d400;
-    border: 1px solid #8a9300;
+    background: var(--ball);
+    border: 1px solid var(--b);
   }
   .name {
     flex: 1;

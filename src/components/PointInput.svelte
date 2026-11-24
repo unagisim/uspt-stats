@@ -235,9 +235,9 @@
     padding: 4px 6px;
   }
   .main {
-    background: var(--a-strong);
-    border-color: var(--a-strong);
-    color: #fff;
+    background: var(--primary-bg);
+    border-color: var(--primary-bg);
+    color: var(--primary-fg);
   }
   .wide {
     grid-column: 1 / -1;

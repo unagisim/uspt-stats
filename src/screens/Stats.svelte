@@ -276,10 +276,10 @@
     white-space: nowrap;
   }
   .pa {
-    color: var(--a-strong);
+    color: var(--a-text);
   }
   .pb {
-    color: var(--b-strong);
+    color: var(--b-text);
     text-align: right;
   }
   .score {
@@ -332,11 +332,11 @@
   }
   .notes .pa,
   .tagsum .pa {
-    color: var(--a-strong);
+    color: var(--a-text);
   }
   .notes .pb,
   .tagsum .pb {
-    color: var(--b-strong);
+    color: var(--b-text);
   }
   .ntags {
     display: flex;

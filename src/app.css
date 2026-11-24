@@ -1,16 +1,29 @@
+/*
+ * Couleurs de l'US Pontet Tennis : bleu marine #071A44 et vert anis #AFDB0C.
+ * Joueur 1 = bleu marine, joueur 2 = vert anis.
+ *   --x       texte posé sur --x-bg
+ *   --x-bg    fond teinté (boutons de point, score)
+ *   --x-strong barres, bordures, traits (pas pour du texte)
+ *   --x-text  texte coloré sur le fond de page
+ */
 :root {
   --bg: #f4f5f7;
   --surface: #ffffff;
   --surface-2: #eceef1;
-  --text: #15171a;
+  --text: #11162a;
   --muted: #5f6670;
   --border: #d5d9df;
-  --a: #0c447c;
-  --a-bg: #dcebfa;
-  --a-strong: #185fa5;
-  --b: #085041;
-  --b-bg: #d6f1e7;
-  --b-strong: #0f6e56;
+  --a: #071a44;
+  --a-bg: #e2e8f5;
+  --a-strong: #0b2a6b;
+  --a-text: #0b2a6b;
+  --b: #3d5000;
+  --b-bg: #eaf5c2;
+  --b-strong: #9bc70a;
+  --b-text: #4f6600;
+  --primary-bg: #071a44;
+  --primary-fg: #ffffff;
+  --ball: #afdb0c;
   --warn: #633806;
   --warn-bg: #faeeda;
   --danger: #a32d2d;
@@ -28,12 +41,17 @@
     --text: #eef0f2;
     --muted: #a2a9b2;
     --border: #343a41;
-    --a: #b5d4f4;
-    --a-bg: #0c447c;
-    --a-strong: #85b7eb;
-    --b: #9fe1cb;
-    --b-bg: #085041;
-    --b-strong: #5dcaa5;
+    --a: #dce4f7;
+    --a-bg: #1b2d5e;
+    --a-strong: #8ea6e6;
+    --a-text: #a9bcee;
+    --b: #e3f4a8;
+    --b-bg: #3b4a05;
+    --b-strong: #afdb0c;
+    --b-text: #c3e553;
+    /* En sombre, le bouton principal passe au vert anis (le marine ne ressortirait pas). */
+    --primary-bg: #afdb0c;
+    --primary-fg: #071a44;
     --warn: #fac775;
     --warn-bg: #4a2c06;
     --danger: #f09595;
@@ -78,9 +96,9 @@ button:active {
 }
 
 button.primary {
-  background: var(--a-strong);
-  border-color: var(--a-strong);
-  color: #fff;
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-fg);
   font-weight: 600;
 }
 

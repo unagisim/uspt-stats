@@ -8,10 +8,11 @@ import { formatDate, matchInfo, type MatchInfo } from './meta';
 import { noteRows, statRows } from './rows';
 
 type RGB = [number, number, number];
-const BLUE: RGB = [24, 95, 165];
-const GREEN: RGB = [15, 110, 86];
-const BLUE_BG: RGB = [220, 235, 250];
-const GREEN_BG: RGB = [214, 241, 231];
+// Couleurs de l'US Pontet Tennis (bleu marine et vert anis), en version lisible sur blanc.
+const BLUE: RGB = [11, 42, 107];
+const GREEN: RGB = [79, 102, 0];
+const BLUE_BG: RGB = [226, 232, 245];
+const GREEN_BG: RGB = [234, 245, 194];
 const GREY: RGB = [95, 102, 112];
 const LIGHT: RGB = [236, 238, 241];
 

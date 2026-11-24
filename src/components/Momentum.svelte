@@ -79,9 +79,9 @@
     margin-top: 4px;
   }
   .ka {
-    color: var(--a-strong);
+    color: var(--a-text);
   }
   .kb {
-    color: var(--b-strong);
+    color: var(--b-text);
   }
 </style>
