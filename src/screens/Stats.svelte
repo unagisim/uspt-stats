@@ -3,9 +3,10 @@
   import CompareRow from '../components/CompareRow.svelte';
   import Momentum from '../components/Momentum.svelte';
   import { configOf, db, exportMatch, shortName, type StoredMatch } from '../lib/db';
-  import { replay, setsSummary } from '../lib/engine';
+  import { replay, setsSummary, type NoteEvent, type NoteTag, type Side } from '../lib/engine';
   import { computeGameStats, computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
   import FileReady from '../components/FileReady.svelte';
+  import NoteEditor from '../components/NoteEditor.svelte';
   import ShotTable from '../components/ShotTable.svelte';
   import {
     balance,
@@ -64,6 +65,39 @@
     if (!st.winner && (st.games.A || st.games.B)) parts.push(`${st.games.A}-${st.games.B}`);
     return parts.join('  ');
   });
+
+  // ---- Modification des notes après coup ----
+  let editIndex = $state<number | null>(null);
+  let deleteIndex = $state<number | null>(null);
+
+  function noteEvent(i: number): NoteEvent | null {
+    const e = match?.events[i];
+    return e?.kind === 'note' ? e : null;
+  }
+
+  async function saveMatch() {
+    if (!match) return;
+    match.updatedAt = Date.now();
+    await db.matches.put($state.snapshot(match));
+  }
+
+  async function saveNoteEdit(i: number, note: { text: string; tags: NoteTag[]; player?: Side }) {
+    const e = noteEvent(i);
+    if (!match || !e) return;
+    const updated: NoteEvent = { kind: 'note', ts: e.ts, text: note.text };
+    if (note.tags.length) updated.tags = [...note.tags];
+    if (note.player) updated.player = note.player;
+    match.events[i] = updated;
+    editIndex = null;
+    await saveMatch();
+  }
+
+  async function deleteNote(i: number) {
+    if (!match || !noteEvent(i)) return;
+    match.events.splice(i, 1);
+    deleteIndex = null;
+    await saveMatch();
+  }
 
   // ---- Exports ----
   type ExportKind = 'pdf' | 'points' | 'stats' | 'json';
@@ -178,17 +212,43 @@
           </p>
         {/each}
         <ol>
-          {#each notesShown as n, i (i)}
+          {#each notesShown as n (n.eventIndex)}
             <li>
-              <div class="nhead">
-                <span class="moment">{n.moment}</span>
-                <span class="who {n.side === 'A' ? 'pa' : n.side === 'B' ? 'pb' : ''}">{n.player}</span>
-              </div>
-              {#if n.tags.length}
-                <div class="ntags">{#each n.tags as t (t)}<span>{t}</span>{/each}</div>
+              {#if editIndex === n.eventIndex}
+                {@const ev = noteEvent(n.eventIndex)}
+                {#if ev}
+                  <NoteEditor
+                    editing
+                    {names}
+                    context={n.moment}
+                    initial={{ text: ev.text, tags: ev.tags ?? [], ...(ev.player ? { player: ev.player } : {}) }}
+                    onSave={(note) => saveNoteEdit(n.eventIndex, note)}
+                    onCancel={() => (editIndex = null)}
+                  />
+                {/if}
+              {:else}
+                <div class="nhead">
+                  <span class="moment">{n.moment}</span>
+                  <span class="who {n.side === 'A' ? 'pa' : n.side === 'B' ? 'pb' : ''}">{n.player}</span>
+                </div>
+                {#if n.tags.length}
+                  <div class="ntags">{#each n.tags as t (t)}<span>{t}</span>{/each}</div>
+                {/if}
+                {#if n.text}<p class="ntext">{n.text}</p>{/if}
+                {#if n.after}<p class="after">Après : {n.after}</p>{/if}
+                {#if deleteIndex === n.eventIndex}
+                  <div class="nconfirm">
+                    <span>Supprimer cette note ?</span>
+                    <button onclick={() => (deleteIndex = null)}>Annuler</button>
+                    <button class="danger" onclick={() => deleteNote(n.eventIndex)}>Supprimer</button>
+                  </div>
+                {:else}
+                  <div class="nactions">
+                    <button onclick={() => { editIndex = n.eventIndex; deleteIndex = null; }}>Modifier</button>
+                    <button onclick={() => (deleteIndex = n.eventIndex)}>Supprimer</button>
+                  </div>
+                {/if}
               {/if}
-              {#if n.text}<p class="ntext">{n.text}</p>{/if}
-              {#if n.after}<p class="after">Après : {n.after}</p>{/if}
             </li>
           {/each}
         </ol>
@@ -448,6 +508,30 @@
   .notes .pb,
   .tagsum .pb {
     color: var(--b-text);
+  }
+  .nactions,
+  .nconfirm {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 2px;
+  }
+  .nactions button,
+  .nconfirm button {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .nconfirm span {
+    flex: 1;
+    font-size: 13px;
+    color: var(--danger);
+  }
+  .danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--danger-bg);
+    font-weight: 600;
   }
   .ntags {
     display: flex;

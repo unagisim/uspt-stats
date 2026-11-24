@@ -4,6 +4,8 @@ import type { EndZone, NoteRecord, NoteTag, PointRecord, RallyLength, ServeZone,
 import { describePoint, END_ZONE, NOTE_TAGS, noteMoment, RALLY, SERVE_ZONE, SHOT } from '../labels';
 
 export interface NoteRow {
+  /** Position de la note dans les événements du match (pour la modifier). */
+  eventIndex: number;
   setNumber: number;
   moment: string;
   player: string;
@@ -23,6 +25,7 @@ export function noteRows(
   return notes.map((n) => {
     const last = n.lastPointIndex !== null ? points[n.lastPointIndex] : undefined;
     return {
+      eventIndex: n.eventIndex,
       setNumber: n.setNumber,
       moment: noteMoment(n),
       player: n.player ? names[n.player] : 'Match',

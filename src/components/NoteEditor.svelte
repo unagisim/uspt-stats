@@ -1,10 +1,13 @@
 <script lang="ts">
-  // Note du coach : joueur concerné, notes rapides (pré-enregistrées, un tap) ou note libre
-  // avec thèmes et commentaire (dictée si disponible).
-  import { onDestroy, onMount } from 'svelte';
+  // Note du coach : joueur concerné, note vocale (dictée), notes rapides (un tap) ou note libre
+  // avec thèmes et commentaire. En mode « editing », modifie une note déjà enregistrée.
+  import { onMount, tick, untrack } from 'svelte';
+  import DictateButton from './DictateButton.svelte';
   import { listPresets, savePreset, type NotePreset } from '../lib/db';
   import type { NoteTag, Side } from '../lib/engine';
   import { NOTE_TAGS } from '../lib/labels';
+
+  type NoteInput = { text: string; tags: NoteTag[]; player?: Side };
 
   let {
     names,
@@ -12,25 +15,32 @@
     onSave,
     onCancel,
     onManage,
+    initial,
+    editing = false,
   }: {
     names: { A: string; B: string };
     /** Moment du match affiché en titre ("Set 1 · 3-2 · 30-15"). */
     context: string;
-    onSave: (note: { text: string; tags: NoteTag[]; player?: Side }) => void;
+    onSave: (note: NoteInput) => void;
     onCancel: () => void;
     /** Ouvre l'écran de gestion des notes pré-enregistrées. */
     onManage?: () => void;
+    /** Note à modifier (mode editing). */
+    initial?: NoteInput;
+    editing?: boolean;
   } = $props();
 
-  let player = $state<Side | undefined>(undefined);
-  let tags = $state<NoteTag[]>([]);
-  let text = $state('');
+  // Copie de la note d'origine à l'ouverture (le formulaire ne la suit plus ensuite).
+  let player = $state<Side | undefined>(untrack(() => initial?.player));
+  let tags = $state<NoteTag[]>(untrack(() => [...(initial?.tags ?? [])]));
+  let text = $state(untrack(() => initial?.text ?? ''));
   let error = $state('');
   let presets = $state<NotePreset[]>([]);
   let keepAsPreset = $state(false);
+  let textarea = $state<HTMLTextAreaElement | null>(null);
 
   onMount(async () => {
-    presets = await listPresets();
+    if (!editing) presets = await listPresets();
   });
 
   const toggleTag = (t: NoteTag) => {
@@ -41,12 +51,20 @@
   /** Note rapide : enregistrée immédiatement pour le joueur choisi. */
   const quick = (p: NotePreset) => onSave({ text: p.text, tags: [...p.tags], ...(player ? { player } : {}) });
 
+  /** Texte dicté : ajouté au commentaire, qui reste modifiable avant l'enregistrement. */
+  async function dictated(said: string) {
+    text = text.trim() ? `${text.trim()} ${said}` : said;
+    error = '';
+    await tick();
+    textarea?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   async function save() {
     if (!text.trim() && tags.length === 0) {
       error = 'Choisissez un thème ou écrivez un commentaire.';
       return;
     }
-    if (keepAsPreset && text.trim()) {
+    if (!editing && keepAsPreset && text.trim()) {
       try {
         await savePreset({ text, tags: [...tags] });
       } catch {
@@ -55,55 +73,10 @@
     }
     onSave({ text: text.trim(), tags: [...tags], ...(player ? { player } : {}) });
   }
-
-  // ---- Dictée vocale (reconnaissance du navigateur, nécessite souvent le réseau) ----
-  interface Recognition {
-    lang: string;
-    interimResults: boolean;
-    continuous: boolean;
-    start(): void;
-    stop(): void;
-    onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-    onend: (() => void) | null;
-    onerror: ((e: { error: string }) => void) | null;
-  }
-  type RecognitionCtor = new () => Recognition;
-  const w = globalThis as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
-  const SpeechCtor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  let recognition: Recognition | null = null;
-  let listening = $state(false);
-
-  function dictate() {
-    if (!SpeechCtor) return;
-    if (listening) {
-      recognition?.stop();
-      return;
-    }
-    recognition = new SpeechCtor();
-    recognition.lang = 'fr-FR';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    recognition.onresult = (e) => {
-      const said = Array.from(e.results)
-        .map((r) => r[0].transcript)
-        .join(' ')
-        .trim();
-      if (said) text = text.trim() ? `${text.trim()} ${said}` : said;
-      error = '';
-    };
-    recognition.onerror = (e) => {
-      error = e.error === 'network' ? 'La dictée nécessite une connexion réseau.' : 'Dictée indisponible.';
-    };
-    recognition.onend = () => (listening = false);
-    listening = true;
-    recognition.start();
-  }
-
-  onDestroy(() => recognition?.stop());
 </script>
 
 <section class="note card">
-  <p class="title"><strong>Note du coach</strong> · {context}</p>
+  <p class="title"><strong>{editing ? 'Modifier la note' : 'Note du coach'}</strong> · {context}</p>
 
   <div class="who" role="group" aria-label="Joueur concerné">
     <button class:on={player === 'A'} onclick={() => (player = player === 'A' ? undefined : 'A')}>{names.A}</button>
@@ -111,21 +84,26 @@
     <button class:on={player === undefined} onclick={() => (player = undefined)}>Match</button>
   </div>
 
-  <div class="sub">
-    <span>Notes rapides · un tap enregistre</span>
-    {#if onManage}<button class="link" onclick={onManage}>Gérer</button>{/if}
-  </div>
-  {#if presets.length}
-    <div class="presets">
-      {#each presets as p (p.id)}
-        <button onclick={() => quick(p)}>{p.text}</button>
-      {/each}
+  {#if !editing}
+    <DictateButton label="Note vocale" onText={dictated} />
+
+    <div class="sub">
+      <span>Notes rapides · un tap enregistre</span>
+      {#if onManage}<button class="link" onclick={onManage}>Gérer</button>{/if}
     </div>
-  {:else}
-    <p class="none">Aucune note rapide. Ajoutez-en avec « Gérer » ou cochez la case sous la note libre.</p>
+    {#if presets.length}
+      <div class="presets">
+        {#each presets as p (p.id)}
+          <button onclick={() => quick(p)}>{p.text}</button>
+        {/each}
+      </div>
+    {:else}
+      <p class="none">Aucune note rapide. Ajoutez-en avec « Gérer » ou cochez la case sous la note libre.</p>
+    {/if}
+
+    <div class="sub"><span>Note libre ou dictée (modifiable avant d'enregistrer)</span></div>
   {/if}
 
-  <div class="sub"><span>Ou note libre</span></div>
   <div class="tags" role="group" aria-label="Thèmes">
     {#each Object.entries(NOTE_TAGS) as [t, label] (t)}
       <button class:on={tags.includes(t as NoteTag)} aria-pressed={tags.includes(t as NoteTag)} onclick={() => toggleTag(t as NoteTag)}>
@@ -134,29 +112,28 @@
     {/each}
   </div>
 
-  <div class="text">
-    <textarea
-      bind:value={text}
-      oninput={() => (error = '')}
-      rows="3"
-      placeholder="Baisse la tête après la double faute, parle seul…"
-      aria-label="Commentaire"
-    ></textarea>
-    {#if SpeechCtor}
-      <button class="mic" class:rec={listening} onclick={dictate} aria-label={listening ? 'Arrêter la dictée' : 'Dicter le commentaire'}>
-        {listening ? '■' : '🎤'}
-      </button>
-    {/if}
-  </div>
-  <label class="keep">
-    <input type="checkbox" bind:checked={keepAsPreset} />
-    Ajouter ce commentaire aux notes rapides
-  </label>
+  {#if editing}
+    <DictateButton label="Dicter (ajoute au texte)" onText={dictated} />
+  {/if}
+  <textarea
+    bind:this={textarea}
+    bind:value={text}
+    oninput={() => (error = '')}
+    rows="3"
+    placeholder="Baisse la tête après la double faute, parle seul…"
+    aria-label="Commentaire"
+  ></textarea>
+  {#if !editing}
+    <label class="keep">
+      <input type="checkbox" bind:checked={keepAsPreset} />
+      Ajouter ce commentaire aux notes rapides
+    </label>
+  {/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   <div class="actions">
     <button onclick={onCancel}>Annuler</button>
-    <button class="primary" onclick={save}>Enregistrer la note</button>
+    <button class="primary" onclick={save}>{editing ? 'Enregistrer les modifications' : 'Enregistrer la note'}</button>
   </div>
 </section>
 
@@ -174,6 +151,10 @@
     margin: 0;
     font-size: 14px;
     color: var(--muted);
+  }
+  .title strong {
+    color: var(--text);
+    font-size: 16px;
   }
   .sub {
     display: flex;
@@ -224,10 +205,6 @@
     min-height: 20px;
     height: 20px;
   }
-  .title strong {
-    color: var(--text);
-    font-size: 16px;
-  }
   .who {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -250,13 +227,7 @@
     border: 2px solid var(--a-strong);
     font-weight: 600;
   }
-  .text {
-    display: flex;
-    gap: 6px;
-    align-items: stretch;
-  }
   textarea {
-    flex: 1;
     min-height: 84px;
     border-radius: 10px;
     border: 1px solid var(--border);
@@ -265,17 +236,6 @@
     font: inherit;
     color: inherit;
     resize: vertical;
-  }
-  .mic {
-    flex: none;
-    width: 52px;
-    padding: 0;
-    font-size: 20px;
-  }
-  .mic.rec {
-    background: var(--danger-bg);
-    color: var(--danger);
-    border-color: var(--danger);
   }
   .actions {
     display: grid;
