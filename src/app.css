@@ -1,0 +1,126 @@
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef1;
+  --text: #15171a;
+  --muted: #5f6670;
+  --border: #d5d9df;
+  --a: #0c447c;
+  --a-bg: #dcebfa;
+  --a-strong: #185fa5;
+  --b: #085041;
+  --b-bg: #d6f1e7;
+  --b-strong: #0f6e56;
+  --warn: #633806;
+  --warn-bg: #faeeda;
+  --danger: #a32d2d;
+  --danger-bg: #fcebeb;
+  --radius: 12px;
+  --tap: 52px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101214;
+    --surface: #1a1d21;
+    --surface-2: #24282d;
+    --text: #eef0f2;
+    --muted: #a2a9b2;
+    --border: #343a41;
+    --a: #b5d4f4;
+    --a-bg: #0c447c;
+    --a-strong: #85b7eb;
+    --b: #9fe1cb;
+    --b-bg: #085041;
+    --b-strong: #5dcaa5;
+    --warn: #fac775;
+    --warn-bg: #4a2c06;
+    --danger: #f09595;
+    --danger-bg: #501313;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+button.primary {
+  background: var(--a-strong);
+  border-color: var(--a-strong);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+input,
+select {
+  min-height: 48px;
+  width: 100%;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 14px;
+  margin: 6px 0 0;
+}
