@@ -61,7 +61,7 @@ export const END_ZONE: Record<EndZone, string> = {
   left_short: 'Gauche court',
   center_short: 'Centre court',
   right_short: 'Droite court',
-  net: 'Filet',
+  net: 'Dans le filet',
   out_long: 'Out long',
   out_wide: 'Out large',
 };

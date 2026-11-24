@@ -5,6 +5,7 @@
   import { configOf, db, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
+  import { DETAIL_SECTIONS, statRows, type StatRow } from '../lib/export/rows';
 
   let { id, onBack }: { id: string; onBack: () => void } = $props();
 
@@ -69,6 +70,17 @@
       exporting = null;
     }
   }
+
+  /** Rubriques détaillées (modes standard et expert), regroupées par section. */
+  const detail = $derived.by(() => {
+    if (!s) return [];
+    const groups = new Map<string, StatRow[]>();
+    for (const r of statRows(s)) {
+      if (!DETAIL_SECTIONS.includes(r.section)) continue;
+      groups.set(r.section, [...(groups.get(r.section) ?? []), r]);
+    }
+    return [...groups.entries()];
+  });
 
   const n = (r: Ratio) => (r.total ? r.won / r.total : 0);
   const withPct = (r: Ratio) => (r.total ? `${frac(r)} (${pct(r)})` : '–');
@@ -163,6 +175,15 @@
           <CompareRow label="Fautes provoquées" a={String(s.A.forcedErrors)} b={String(s.B.forcedErrors)} va={s.A.forcedErrors} vb={s.B.forcedErrors} lowerIsBetter />
         </section>
       {/if}
+
+      {#each detail as [section, rows] (section)}
+        <section class="card">
+          <h2>{section}</h2>
+          {#each rows as r (r.label)}
+            <CompareRow label={r.label} a={r.a} b={r.b} />
+          {/each}
+        </section>
+      {/each}
     {/if}
 
     <section class="card">

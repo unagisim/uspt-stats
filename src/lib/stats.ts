@@ -2,7 +2,22 @@
 // Les stats qui dépendent du mode de saisie (1re balle, fin de point) ne sont
 // remplies que si les données existent.
 
-import { other, type PointRecord, type Side } from './engine';
+import {
+  other,
+  type EndZone,
+  type PointRecord,
+  type RallyLength,
+  type ServeZone,
+  type Shot,
+  type Side,
+} from './engine';
+
+/** Coups gagnants, fautes directes et fautes provoquées d'un joueur pour un type de coup. */
+export interface ShotCount {
+  winners: number;
+  unforcedErrors: number;
+  forcedErrors: number;
+}
 
 export interface Ratio {
   won: number;
@@ -32,6 +47,16 @@ export interface SideStats {
   /** Fautes commises par ce joueur sous la pression de l'adversaire. */
   forcedErrors: number;
   longestStreak: number;
+  /** Fin des points par type de coup (coups joués par ce joueur). */
+  byShot: Partial<Record<Shot, ShotCount>>;
+  /** Points gagnés selon la longueur de l'échange. */
+  rally: Partial<Record<RallyLength, Ratio>>;
+  /** Points gagnés sur son service selon la zone visée. */
+  serveZones: Partial<Record<ServeZone, Ratio>>;
+  /** Points terminés par ce joueur au filet (gagnés = coup gagnant ou faute adverse). */
+  netPoints: Ratio;
+  /** Zones des coups gagnants de ce joueur. */
+  winnerZones: Partial<Record<EndZone, number>>;
 }
 
 export interface MatchStats {
@@ -42,6 +67,11 @@ export interface MatchStats {
   hasServeDetail: boolean;
   /** Au moins un point saisi avec le type de fin de point. */
   hasEndingDetail: boolean;
+  hasShotDetail: boolean;
+  hasRallyDetail: boolean;
+  hasServeZoneDetail: boolean;
+  hasNetDetail: boolean;
+  hasZoneDetail: boolean;
   /** Écart cumulé de points (A − B) après chaque point. */
   momentum: number[];
   /** Index (dans momentum) des premiers points de chaque nouveau set. */
@@ -74,6 +104,11 @@ function emptySide(): SideStats {
     unforcedErrors: 0,
     forcedErrors: 0,
     longestStreak: 0,
+    byShot: {},
+    rally: {},
+    serveZones: {},
+    netPoints: ratio(),
+    winnerZones: {},
   };
 }
 
@@ -90,6 +125,11 @@ export function computeStats(allPoints: readonly PointRecord[], setNumber?: numb
   const setStarts: number[] = [];
   let hasServeDetail = false;
   let hasEndingDetail = false;
+  let hasShotDetail = false;
+  let hasRallyDetail = false;
+  let hasServeZoneDetail = false;
+  let hasNetDetail = false;
+  let hasZoneDetail = false;
   let diff = 0;
   let streakSide: Side | null = null;
   let streak = 0;
@@ -142,6 +182,33 @@ export function computeStats(allPoints: readonly PointRecord[], setNumber?: numb
       else S[l].forcedErrors++;
     }
 
+    // Joueur qui a frappé le dernier coup : le gagnant sur un coup gagnant, le perdant sur une faute.
+    const hitter = d?.ending && d.ending !== 'winner' ? l : w;
+    if (d?.shot) {
+      hasShotDetail = true;
+      const c = (S[hitter].byShot[d.shot] ??= { winners: 0, unforcedErrors: 0, forcedErrors: 0 });
+      if (d.ending === 'winner') c.winners++;
+      else if (d.ending === 'unforced_error') c.unforcedErrors++;
+      else if (d.ending === 'forced_error') c.forcedErrors++;
+    }
+    if (d?.rally) {
+      hasRallyDetail = true;
+      count((S[w].rally[d.rally] ??= ratio()), true);
+      count((S[l].rally[d.rally] ??= ratio()), false);
+    }
+    if (d?.serveZone) {
+      hasServeZoneDetail = true;
+      count((S[srv].serveZones[d.serveZone] ??= ratio()), w === srv);
+    }
+    if (d?.position === 'net' || d?.netApproach) {
+      hasNetDetail = true;
+      count(S[hitter].netPoints, hitter === w);
+    }
+    if (d?.endZone && d.ending === 'winner') {
+      hasZoneDetail = true;
+      S[w].winnerZones[d.endZone] = (S[w].winnerZones[d.endZone] ?? 0) + 1;
+    }
+
     streak = w === streakSide ? streak + 1 : 1;
     streakSide = w;
     S[w].longestStreak = Math.max(S[w].longestStreak, streak);
@@ -159,6 +226,11 @@ export function computeStats(allPoints: readonly PointRecord[], setNumber?: numb
     totalPoints: points.length,
     hasServeDetail,
     hasEndingDetail,
+    hasShotDetail,
+    hasRallyDetail,
+    hasServeZoneDetail,
+    hasNetDetail,
+    hasZoneDetail,
     momentum,
     setStarts,
     durationMs,

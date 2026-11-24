@@ -91,6 +91,40 @@ describe('stats détaillées', () => {
   });
 });
 
+describe('stats du mode expert', () => {
+  // A sert les 4 points.
+  const s = stats([
+    p('A', { serveZone: 'T', ending: 'winner', shot: 'forehand', endZone: 'right_deep', rally: '1-4' }),
+    p('A', { serveZone: 'wide', ending: 'unforced_error', shot: 'backhand', rally: '5-8' }),
+    p('B', { serveZone: 'T', ending: 'winner', shot: 'volley', position: 'net', rally: '5-8' }),
+    p('A', { ending: 'forced_error', shot: 'volley', position: 'net' }),
+  ]);
+
+  it('fin des points par coup, attribuée au joueur qui frappe', () => {
+    expect(s.hasShotDetail).toBe(true);
+    expect(s.A.byShot.forehand).toEqual({ winners: 1, unforcedErrors: 0, forcedErrors: 0 });
+    expect(s.B.byShot.backhand).toEqual({ winners: 0, unforcedErrors: 1, forcedErrors: 0 });
+    expect(s.B.byShot.volley).toEqual({ winners: 1, unforcedErrors: 0, forcedErrors: 1 });
+  });
+
+  it('longueur des échanges', () => {
+    expect(s.A.rally['1-4']).toEqual({ won: 1, total: 1 });
+    expect(s.A.rally['5-8']).toEqual({ won: 1, total: 2 });
+    expect(s.B.rally['5-8']).toEqual({ won: 1, total: 2 });
+  });
+
+  it('zones de service', () => {
+    expect(s.A.serveZones.T).toEqual({ won: 1, total: 2 });
+    expect(s.A.serveZones.wide).toEqual({ won: 1, total: 1 });
+  });
+
+  it('points au filet et zones des coups gagnants', () => {
+    expect(s.B.netPoints).toEqual({ won: 1, total: 2 });
+    expect(s.A.winnerZones).toEqual({ right_deep: 1 });
+    expect(s.hasZoneDetail).toBe(true);
+  });
+});
+
 describe('filtre par set', () => {
   const events = many('A'.repeat(24) + 'BBBB');
 

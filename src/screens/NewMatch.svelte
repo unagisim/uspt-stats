@@ -6,9 +6,16 @@
     fullName,
     SURFACES,
     uid,
+    type InputMode,
     type Player,
     type Surface,
   } from '../lib/db';
+
+  const MODES: { id: InputMode; label: string; description: string }[] = [
+    { id: 'quick', label: 'Rapide', description: 'Un tap par point : gagnant, ace, double faute.' },
+    { id: 'standard', label: 'Standard', description: '2 à 4 taps : 1re/2e balle, fin du point et coup.' },
+    { id: 'expert', label: 'Expert', description: 'En plus : zones, effet, position, longueur de l’échange.' },
+  ];
   import { FORMATS, type FormatId, type Side } from '../lib/engine';
 
   let { onCancel, onCreated }: { onCancel: () => void; onCreated: (id: string) => void } = $props();
@@ -19,6 +26,7 @@
   let formatId = $state<FormatId>('FFT2');
   let firstServer = $state<Side>('A');
   let letEnabled = $state(false);
+  let inputMode = $state<InputMode>('standard');
   let tournoi = $state('');
   let lieu = $state('');
   let surface = $state<Surface | ''>('');
@@ -51,7 +59,7 @@
       formatId,
       firstServer,
       letEnabled,
-      inputMode: 'quick',
+      inputMode,
       players: { A, B },
       context: {
         ...(tournoi.trim() ? { tournoi: tournoi.trim() } : {}),
@@ -141,7 +149,17 @@
     </div>
   </details>
 
-  <p class="mode">Mode de saisie : rapide. Les modes standard et expert arrivent dans une prochaine version.</p>
+  <section class="card">
+    <span class="label">Mode de saisie (modifiable pendant le match)</span>
+    <div class="formats">
+      {#each MODES as m (m.id)}
+        <button type="button" class="choice" class:selected={inputMode === m.id} onclick={() => (inputMode = m.id)}>
+          <strong>{m.label}</strong>
+          <span>{m.description}</span>
+        </button>
+      {/each}
+    </div>
+  </section>
 
   <button type="submit" class="primary start" disabled={saving}>Commencer le match</button>
 </form>
@@ -228,11 +246,6 @@
   }
   details[open] summary {
     margin-bottom: 12px;
-  }
-  .mode {
-    font-size: 13px;
-    color: var(--muted);
-    margin: 0;
   }
   .start {
     min-height: 60px;

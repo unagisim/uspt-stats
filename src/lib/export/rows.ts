@@ -1,6 +1,17 @@
 // Lignes de statistiques communes aux exports (CSV et PDF).
 
+import type { EndZone, RallyLength, ServeZone, Shot } from '../engine';
+import { END_ZONE, RALLY, SERVE_ZONE, SHOT } from '../labels';
 import { frac, pct, type MatchStats, type Ratio } from '../stats';
+
+/** Rubriques alimentées par les modes standard et expert. */
+export const DETAIL_SECTIONS = [
+  'Coups gagnants / fautes directes',
+  'Longueur des échanges',
+  'Service par zone',
+  'Jeu au filet',
+  'Zones des coups gagnants',
+];
 
 export interface StatRow {
   section: string;
@@ -52,6 +63,39 @@ export function statRows(s: MatchStats): StatRow[] {
     add('Fin des points', 'Coups gagnants', s.A.winners, s.B.winners);
     add('Fin des points', 'Fautes directes', s.A.unforcedErrors, s.B.unforcedErrors);
     add('Fin des points', 'Fautes provoquées', s.A.forcedErrors, s.B.forcedErrors);
+  }
+
+  const [shots, rally, serve, net, zones] = DETAIL_SECTIONS;
+  if (s.hasShotDetail) {
+    for (const k of Object.keys(SHOT) as Shot[]) {
+      const a = s.A.byShot[k];
+      const b = s.B.byShot[k];
+      if (!a && !b) continue;
+      const fmt = (c = { winners: 0, unforcedErrors: 0 }) => `${c.winners} / ${c.unforcedErrors}`;
+      add(shots, SHOT[k], fmt(a), fmt(b));
+    }
+  }
+  if (s.hasRallyDetail) {
+    for (const k of Object.keys(RALLY) as RallyLength[]) {
+      if (s.A.rally[k]) add(rally, `Points gagnés (${RALLY[k]})`, withPct(s.A.rally[k]!), withPct(s.B.rally[k]!));
+    }
+  }
+  if (s.hasServeZoneDetail) {
+    for (const k of Object.keys(SERVE_ZONE) as ServeZone[]) {
+      const a = s.A.serveZones[k];
+      const b = s.B.serveZones[k];
+      if (a || b) add(serve, `Points gagnés, service ${SERVE_ZONE[k].toLowerCase()}`, a ? withPct(a) : '–', b ? withPct(b) : '–');
+    }
+  }
+  if (s.hasNetDetail) {
+    add(net, 'Points gagnés au filet', withPct(s.A.netPoints), withPct(s.B.netPoints));
+  }
+  if (s.hasZoneDetail) {
+    for (const k of Object.keys(END_ZONE) as EndZone[]) {
+      const a = s.A.winnerZones[k] ?? 0;
+      const b = s.B.winnerZones[k] ?? 0;
+      if (a || b) add(zones, END_ZONE[k], a, b);
+    }
   }
   return rows;
 }

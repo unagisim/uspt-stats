@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PointInput from '../components/PointInput.svelte';
   import Scoreboard from '../components/Scoreboard.svelte';
-  import { configOf, db, shortName, type StoredMatch } from '../lib/db';
-  import { INCIDENTS } from '../lib/labels';
+  import { configOf, db, shortName, type InputMode, type StoredMatch } from '../lib/db';
+  import { ENDING, INCIDENTS, SHOT } from '../lib/labels';
   import {
     other,
     pointSituation,
@@ -17,6 +18,9 @@
   let { id, onExit, onStats }: { id: string; onExit: () => void; onStats: () => void } = $props();
 
   const NO_PLAYER: IncidentType[] = ['interruption', 'resumption'];
+  const MODES: Record<InputMode, string> = { quick: 'Rapide', standard: 'Standard', expert: 'Expert' };
+
+  let pointInput = $state<ReturnType<typeof PointInput> | null>(null);
 
   let match = $state<StoredMatch | null>(null);
   let notFound = $state(false);
@@ -102,7 +106,17 @@
   const doubleFault = () =>
     score && point(other(score.server), { firstServeIn: false, serveOutcome: 'double_fault' });
 
+  async function setMode(m: InputMode) {
+    if (!match || match.inputMode === m) return;
+    match.inputMode = m;
+    pendingLets = 0;
+    await persist();
+    closeMenu();
+  }
+
   async function undo() {
+    // D'abord l'étape en cours du point (modes standard et expert), puis le dernier point.
+    if (pointInput?.back()) return;
     if (pendingLets) {
       pendingLets = 0;
       return;
@@ -138,9 +152,12 @@
 
   function describe(e: MatchEvent): string {
     if (e.kind === 'incident') return `${INCIDENTS[e.type]}${e.player ? ` ${names[e.player]}` : ''}`;
-    const extra =
-      e.details?.serveOutcome === 'ace' ? ' (ace)' : e.details?.serveOutcome === 'double_fault' ? ' (double faute)' : '';
-    return `Point ${names[e.winner]}${extra}`;
+    const d = e.details;
+    let extra = '';
+    if (d?.serveOutcome === 'ace') extra = 'ace';
+    else if (d?.serveOutcome === 'double_fault') extra = 'double faute';
+    else if (d?.ending) extra = [ENDING[d.ending], d.shot ? SHOT[d.shot].toLowerCase() : ''].filter(Boolean).join(', ');
+    return `Point ${names[e.winner]}${extra ? ` (${extra})` : ''}`;
   }
 
   const endText = $derived.by(() => {
@@ -161,9 +178,9 @@
   <div class="live">
     <header>
       <button class="ghost" onclick={onExit}>‹ Accueil</button>
-      <span class="fmt">{config.format.label}</span>
+      <span class="fmt">{config.format.label} · {MODES[match.inputMode]}</span>
       <button class="ghost" onclick={() => (menuOpen ? closeMenu() : (menuOpen = true))} aria-expanded={menuOpen}>
-        Incidents
+        Menu
       </button>
     </header>
 
@@ -183,6 +200,13 @@
     {#if menuOpen}
       <section class="menu card">
         {#if !incidentType}
+          <p class="q">Mode de saisie</p>
+          <div class="modes">
+            {#each Object.entries(MODES) as [m, label] (m)}
+              <button class:on={match.inputMode === m} onclick={() => setMode(m as InputMode)}>{label}</button>
+            {/each}
+          </div>
+          <p class="q">Incidents</p>
           <div class="grid">
             {#each Object.entries(INCIDENTS) as [t, text] (t)}
               <button onclick={() => chooseIncident(t as IncidentType)}>{text}</button>
@@ -206,6 +230,15 @@
         <button class="primary" onclick={onStats}>Voir les statistiques</button>
         <button onclick={onExit}>Retour à l'accueil</button>
       </section>
+    {:else if match.inputMode !== 'quick'}
+      <PointInput
+        bind:this={pointInput}
+        mode={match.inputMode}
+        server={score.server}
+        {names}
+        letEnabled={config.letEnabled}
+        onRecord={(w, details) => point(w, details)}
+      />
     {:else}
       <div class="big">
         <button class="pa" onclick={() => point('A')}>
@@ -298,7 +331,22 @@
     gap: 8px;
   }
   .menu .q {
-    margin: 0 0 10px;
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  .menu .q + .grid,
+  .menu .q + .modes {
+    margin-bottom: 12px;
+  }
+  .modes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .modes .on {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
     font-weight: 600;
   }
   .close {
@@ -402,7 +450,8 @@
       grid-column: 1 / -1;
     }
     .big,
-    .end {
+    .end,
+    .live > :global(.input) {
       grid-column: 2;
       grid-row: 2 / 5;
       flex-direction: row;
