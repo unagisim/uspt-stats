@@ -3,8 +3,11 @@
 
 import Dexie, { type EntityTable } from 'dexie';
 import { makeBackup, parseBackup, planImport, type Backup } from './backup';
-import { FORMATS, replay, type FormatId, type MatchConfig, type MatchEvent, type Side } from './engine';
+import { FORMATS, replay, type FormatId, type MatchConfig, type MatchEvent, type NoteTag, type Side } from './engine';
 import { fullName, splitName } from './names';
+import { defaultPresets, newPresets, type NotePreset } from './presets';
+
+export type { NotePreset } from './presets';
 
 export interface Player {
   id?: number;
@@ -56,6 +59,7 @@ export interface StoredMatch {
 class AppDB extends Dexie {
   players!: EntityTable<Player, 'id'>;
   matches!: EntityTable<StoredMatch, 'id'>;
+  presets!: EntityTable<NotePreset, 'id'>;
 
   constructor() {
     super('uspt-stats');
@@ -63,10 +67,44 @@ class AppDB extends Dexie {
       players: '++id, nom, prenom',
       matches: 'id, updatedAt, status',
     });
+    // Version 2 : notes pré-enregistrées, avec une liste de départ.
+    this.version(2)
+      .stores({ presets: '++id, order' })
+      .upgrade((tx) => tx.table('presets').bulkAdd(defaultPresets()));
+    // Base créée directement en version 2 (premier lancement).
+    this.on('populate', (tx) => {
+      tx.table('presets').bulkAdd(defaultPresets());
+    });
   }
 }
 
 export const db = new AppDB();
+
+// ---- Notes pré-enregistrées ----
+
+export const listPresets = () => db.presets.orderBy('order').toArray();
+
+/** Ajoute (sans id) ou met à jour (avec id) une note pré-enregistrée. */
+export async function savePreset(p: { id?: number; text: string; tags: NoteTag[] }): Promise<void> {
+  const text = p.text.trim();
+  // Copie en tableau simple : un tableau réactif de Svelte ne peut pas être stocké dans IndexedDB.
+  const tags = [...p.tags];
+  if (p.id !== undefined) {
+    await db.presets.update(p.id, { text, tags });
+    return;
+  }
+  const last = await db.presets.orderBy('order').last();
+  await db.presets.add({ text, tags, order: (last?.order ?? -1) + 1 });
+}
+
+export const deletePreset = (id: number) => db.presets.delete(id);
+
+/** Enregistre un nouvel ordre (liste complète, dans l'ordre voulu). */
+export async function reorderPresets(list: NotePreset[]): Promise<void> {
+  await db.transaction('rw', db.presets, async () => {
+    for (const [i, p] of list.entries()) if (p.id !== undefined) await db.presets.update(p.id, { order: i });
+  });
+}
 
 export const configOf = (m: StoredMatch): MatchConfig => ({
   format: FORMATS[m.formatId],
@@ -76,9 +114,17 @@ export const configOf = (m: StoredMatch): MatchConfig => ({
 
 export { fullName, shortName, splitName } from './names';
 
-/** Sauvegarde complète : tous les joueurs et tous les matchs de l'appareil. */
+/** Sauvegarde complète : joueurs, matchs et notes pré-enregistrées de l'appareil. */
 export async function exportBackup(): Promise<Backup> {
-  return makeBackup(await db.players.toArray(), await db.matches.toArray());
+  return makeBackup(await db.players.toArray(), await db.matches.toArray(), await listPresets());
+}
+
+/** Fichier d'un seul match (même format que la sauvegarde, importable de la même façon). */
+export async function exportMatch(id: string): Promise<Backup> {
+  const m = await db.matches.get(id);
+  if (!m) throw new Error('Ce match est introuvable.');
+  const players = [m.players.A, m.players.B].map((p) => ({ id: p.id, prenom: p.prenom, nom: p.nom }));
+  return makeBackup(players, [m], [], 'match');
 }
 
 export interface ImportResult {
@@ -86,6 +132,7 @@ export interface ImportResult {
   updated: number;
   unchanged: number;
   invalid: number;
+  presetsAdded: number;
 }
 
 /**
@@ -94,18 +141,26 @@ export interface ImportResult {
  * rattachés à ceux de l'appareil par leur nom (les identifiants diffèrent d'un appareil à l'autre).
  */
 export async function importBackup(text: string): Promise<ImportResult> {
-  const { matches, invalid } = parseBackup(text);
+  const { matches, invalid, presets } = parseBackup(text);
   const plan = planImport(await db.matches.toArray(), matches);
   const toWrite = [...plan.add, ...plan.update];
-  await db.transaction('rw', db.players, db.matches, async () => {
+  const presetsToAdd = newPresets(await listPresets(), presets);
+  await db.transaction('rw', db.players, db.matches, db.presets, async () => {
     for (const m of toWrite) {
       const A = await findOrCreatePlayer(fullName(m.players.A) || m.players.A.nom);
       const B = await findOrCreatePlayer(fullName(m.players.B) || m.players.B.nom);
       const winner = replay(configOf(m), m.events).state.winner;
       await db.matches.put({ ...m, players: { A, B }, winner, status: winner ? 'finished' : 'in_progress' });
     }
+    for (const p of presetsToAdd) await savePreset(p);
   });
-  return { added: plan.add.length, updated: plan.update.length, unchanged: plan.unchanged, invalid };
+  return {
+    added: plan.add.length,
+    updated: plan.update.length,
+    unchanged: plan.unchanged,
+    invalid,
+    presetsAdded: presetsToAdd.length,
+  };
 }
 
 /** Supprime définitivement un match de l'appareil. */

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import CompareRow from '../components/CompareRow.svelte';
   import Momentum from '../components/Momentum.svelte';
-  import { configOf, db, shortName, type StoredMatch } from '../lib/db';
+  import { configOf, db, exportMatch, shortName, type StoredMatch } from '../lib/db';
   import { replay, setsSummary } from '../lib/engine';
   import { computeStats, formatDuration, frac, pct, type Ratio } from '../lib/stats';
   import { DETAIL_SECTIONS, noteRows, statRows, tagCounts, type StatRow } from '../lib/export/rows';
@@ -45,7 +45,7 @@
   });
 
   // ---- Exports ----
-  type ExportKind = 'pdf' | 'points' | 'stats';
+  type ExportKind = 'pdf' | 'points' | 'stats' | 'json';
   let exporting = $state<ExportKind | null>(null);
   let exportMsg = $state('');
   let exportError = $state(false);
@@ -63,6 +63,10 @@
       if (kind === 'pdf') {
         const { buildMatchPdf } = await import('../lib/export/pdf');
         ({ blob, fileName } = buildMatchPdf(m));
+      } else if (kind === 'json') {
+        const { matchInfo } = await import('../lib/export/meta');
+        blob = new Blob([JSON.stringify(await exportMatch(m.id), null, 1)], { type: 'application/json' });
+        fileName = `${matchInfo(m).fileBase}.json`;
       } else {
         const csv = await import('../lib/export/csv');
         const { matchInfo } = await import('../lib/export/meta');
@@ -232,7 +236,12 @@
         </button>
         <button onclick={() => exportFile('stats')} disabled={exporting !== null}>Statistiques (CSV)</button>
         <button onclick={() => exportFile('points')} disabled={exporting !== null}>Détail des points (CSV)</button>
+        <button onclick={() => exportFile('json')} disabled={exporting !== null}>Match complet (JSON, réimportable)</button>
       </div>
+      <p class="hint">
+        Le fichier JSON contient tout le match (points, incidents, notes). Il s'importe sur un autre appareil depuis
+        l'accueil, rubrique Sauvegarde.
+      </p>
       {#if exportMsg}<p class="hint" class:error={exportError} role="status">{exportMsg}</p>{/if}
     </section>
   {/if}

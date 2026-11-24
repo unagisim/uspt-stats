@@ -18,7 +18,12 @@
     type Side,
   } from '../lib/engine';
 
-  let { id, onExit, onStats }: { id: string; onExit: () => void; onStats: () => void } = $props();
+  let {
+    id,
+    onExit,
+    onStats,
+    onPresets,
+  }: { id: string; onExit: () => void; onStats: () => void; onPresets: () => void } = $props();
 
   const NO_PLAYER: IncidentType[] = ['interruption', 'resumption'];
   const MODES: Record<InputMode, string> = { quick: 'Rapide', standard: 'Standard', expert: 'Expert' };
@@ -246,7 +251,7 @@
     {/if}
 
     {#if noteOpen}
-      <NoteEditor {names} context={noteContext} onSave={saveNote} onCancel={() => (noteOpen = false)} />
+      <NoteEditor {names} context={noteContext} onSave={saveNote} onCancel={() => (noteOpen = false)} onManage={onPresets} />
     {:else if score.winner}
       <section class="end card">
         <h2>{endText}</h2>

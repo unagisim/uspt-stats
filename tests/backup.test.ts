@@ -22,11 +22,37 @@ const match = (id: string, updatedAt = 100): StoredMatch => ({
 });
 
 describe('sauvegarde', () => {
-  it('aller-retour export / import', () => {
-    const b = makeBackup([{ id: 1, prenom: 'Léo', nom: 'Martin' }], [match('m1')], 42);
+  it('aller-retour export / import, avec les notes pré-enregistrées', () => {
+    const presets = [{ id: 3, text: 'Joue trop court', tags: ['tactic' as const], order: 0 }];
+    const b = makeBackup([{ id: 1, prenom: 'Léo', nom: 'Martin' }], [match('m1')], presets, 'all', 42);
+    expect(b.scope).toBe('all');
+    expect(b.presets).toEqual([{ text: 'Joue trop court', tags: ['tactic'] }]);
     const parsed = parseBackup(JSON.stringify(b));
     expect(parsed.invalid).toBe(0);
     expect(parsed.matches).toEqual([match('m1')]);
+    expect(parsed.presets).toEqual([{ text: 'Joue trop court', tags: ['tactic'] }]);
+  });
+
+  it('fichier d’un seul match', () => {
+    const b = makeBackup([], [match('m1')], [], 'match');
+    expect(b.scope).toBe('match');
+    expect(parseBackup(JSON.stringify(b)).matches).toHaveLength(1);
+  });
+
+  it('anciennes sauvegardes sans notes pré-enregistrées', () => {
+    expect(parseBackup(JSON.stringify({ app: 'uspt-stats', version: 1, matches: [] })).presets).toEqual([]);
+  });
+
+  it('notes pré-enregistrées invalides ignorées, thèmes inconnus retirés', () => {
+    const parsed = parseBackup(
+      JSON.stringify({
+        app: 'uspt-stats',
+        version: 1,
+        matches: [],
+        presets: [{ text: '  Ok  ', tags: ['tactic', 'inconnu', 'tactic'] }, { text: '' }, { tags: [] }, 'x'],
+      }),
+    );
+    expect(parsed.presets).toEqual([{ text: 'Ok', tags: ['tactic'] }]);
   });
 
   it('refuse un fichier illisible, étranger ou trop récent', () => {

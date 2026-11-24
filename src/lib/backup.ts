@@ -2,20 +2,41 @@
 
 import type { Player, StoredMatch } from './db';
 import { FORMATS } from './engine';
+import { sanitizePreset, type NotePreset } from './presets';
 
 export const BACKUP_APP = 'uspt-stats';
 export const BACKUP_VERSION = 1;
+
+export type BackupPreset = Omit<NotePreset, 'id' | 'order'>;
 
 export interface Backup {
   app: typeof BACKUP_APP;
   version: number;
   exportedAt: number;
+  /** "all" = sauvegarde complète, "match" = un seul match. */
+  scope: 'all' | 'match';
   players: Player[];
   matches: StoredMatch[];
+  /** Notes pré-enregistrées (sauvegarde complète uniquement). */
+  presets: BackupPreset[];
 }
 
-export function makeBackup(players: Player[], matches: StoredMatch[], now = Date.now()): Backup {
-  return { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now, players, matches };
+export function makeBackup(
+  players: Player[],
+  matches: StoredMatch[],
+  presets: readonly NotePreset[] = [],
+  scope: Backup['scope'] = 'all',
+  now = Date.now(),
+): Backup {
+  return {
+    app: BACKUP_APP,
+    version: BACKUP_VERSION,
+    exportedAt: now,
+    scope,
+    players,
+    matches,
+    presets: presets.map((p) => ({ text: p.text, tags: [...p.tags] })),
+  };
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -50,6 +71,7 @@ export interface ParsedBackup {
   matches: StoredMatch[];
   /** Matchs du fichier ignorés car mal formés. */
   invalid: number;
+  presets: BackupPreset[];
 }
 
 /** Lit un fichier de sauvegarde. Lève une erreur avec un message en français si le fichier est inutilisable. */
@@ -72,7 +94,10 @@ export function parseBackup(text: string): ParsedBackup {
     letEnabled: !!m.letEnabled,
     context: isObj(m.context) ? m.context : {},
   }));
-  return { matches, invalid: data.matches.length - matches.length };
+  const presets = Array.isArray(data.presets)
+    ? data.presets.map(sanitizePreset).filter((p): p is BackupPreset => p !== null)
+    : [];
+  return { matches, invalid: data.matches.length - matches.length, presets };
 }
 
 export interface ImportPlan {

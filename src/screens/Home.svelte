@@ -6,7 +6,11 @@
   import { applyUpdate, install, pwa } from '../lib/pwa.svelte';
   import { filterMatches, type StatusFilter } from '../lib/search';
 
-  let { onNew, onOpen }: { onNew: () => void; onOpen: (id: string) => void } = $props();
+  let {
+    onNew,
+    onOpen,
+    onPresets,
+  }: { onNew: () => void; onOpen: (id: string) => void; onPresets: () => void } = $props();
 
   let matches = $state<StoredMatch[]>([]);
   let loaded = $state(false);
@@ -67,7 +71,10 @@
       const parts = [`${r.added} ajouté${r.added > 1 ? 's' : ''}`, `${r.updated} mis à jour`];
       if (r.unchanged) parts.push(`${r.unchanged} déjà à jour`);
       if (r.invalid) parts.push(`${r.invalid} illisible${r.invalid > 1 ? 's' : ''} ignoré${r.invalid > 1 ? 's' : ''}`);
-      backupMsg = `Import terminé : ${parts.join(', ')}.`;
+      const presetPart = r.presetsAdded
+        ? ` ${r.presetsAdded} note${r.presetsAdded > 1 ? 's' : ''} rapide${r.presetsAdded > 1 ? 's' : ''} ajoutée${r.presetsAdded > 1 ? 's' : ''}.`
+        : '';
+      backupMsg = `Import terminé : ${parts.join(', ')}.${presetPart}`;
     } catch (err) {
       backupError = true;
       backupMsg = err instanceof Error ? err.message : "L'import a échoué.";
@@ -197,15 +204,22 @@
   </ul>
 
   <section class="card backup">
+    <h2>Notes rapides</h2>
+    <p class="hint">Les notes pré-enregistrées que vous ajoutez en un tap pendant les matchs.</p>
+    <button onclick={onPresets}>Gérer les notes rapides</button>
+  </section>
+
+  <section class="card backup">
     <h2>Sauvegarde</h2>
     <p class="hint">
       Les matchs ne sont enregistrés que sur cet appareil. Exportez-les régulièrement dans un fichier, et
-      importez ce fichier pour les retrouver sur un autre appareil. L'import n'efface rien : il ajoute les
-      matchs manquants et met à jour ceux qui ont changé.
+      importez ce fichier pour les retrouver sur un autre appareil. Un match seul s'exporte depuis son écran de
+      statistiques et s'importe ici de la même façon. L'import n'efface rien : il ajoute les matchs manquants et
+      met à jour ceux qui ont changé.
     </p>
     <button onclick={saveBackup} disabled={busy || matches.length === 0}>Exporter tous les matchs (JSON)</button>
     <label class="file" class:disabled={busy}>
-      Importer une sauvegarde
+      Importer un match ou une sauvegarde
       <input type="file" accept="application/json,.json" onchange={restore} disabled={busy} />
     </label>
     {#if backupMsg}<p class="hint" class:error={backupError} role="status">{backupMsg}</p>{/if}
