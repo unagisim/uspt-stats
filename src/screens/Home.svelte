@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import CoachAccount from '../components/CoachAccount.svelte';
   import FileReady from '../components/FileReady.svelte';
   import { backupFileName } from '../lib/backup';
   import { configOf, db, deleteMatch, exportBackup, fullName, importBackup, type StoredMatch } from '../lib/db';
@@ -11,7 +12,8 @@
     onNew,
     onOpen,
     onPresets,
-  }: { onNew: () => void; onOpen: (id: string) => void; onPresets: () => void } = $props();
+    onCoaches,
+  }: { onNew: () => void; onOpen: (id: string) => void; onPresets: () => void; onCoaches: () => void } = $props();
 
   let matches = $state<StoredMatch[]>([]);
   let loaded = $state(false);
@@ -203,6 +205,8 @@
       </li>
     {/each}
   </ul>
+
+  <CoachAccount onManageCoaches={onCoaches} />
 
   <section class="card backup">
     <h2>Notes rapides</h2>

@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// Règles de sécurité de la V2 (cahier des charges, section 11.3).
+// À publier dans la console Firebase : Firestore Database > Règles > coller > Publier.
+//
+// - coaches/{email}  : liste des coachs autorisés (identifiant = adresse e-mail en minuscules).
+//                      Lecture : coachs. Écriture : administrateurs.
+// - matches/{id}     : matchs complets (événements, notes). Lecture : coachs.
+//                      Écriture : le coach propriétaire (ownerUid).
+// - live/{jeton}     : résumé public d'un match partagé. Lecture d'un document précis par
+//                      quiconque a le lien (pas de liste). Écriture : le coach propriétaire.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function coachPath() {
+      return /databases/$(database)/documents/coaches/$(myEmail());
+    }
+    function isCoach() {
+      return signedIn() && exists(coachPath());
+    }
+    function isAdmin() {
+      return isCoach() && get(coachPath()).data.role == 'admin';
+    }
+    function ownsNew() {
+      return request.resource.data.ownerUid == request.auth.uid;
+    }
+    function ownsExisting() {
+      return resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /coaches/{email} {
+      allow read: if isCoach();
+      allow create, update: if isAdmin()
+        && email == email.lower()
+        && request.resource.data.email == email
+        && request.resource.data.role in ['coach', 'admin'];
+      // Un administrateur ne peut pas se retirer lui-même (évite de perdre tout accès).
+      allow delete: if isAdmin() && email != myEmail();
+    }
+
+    match /matches/{matchId} {
+      allow read: if isCoach();
+      allow create: if isCoach() && ownsNew();
+      allow update: if isCoach() && ownsExisting() && ownsNew();
+      allow delete: if isCoach() && (ownsExisting() || isAdmin());
+    }
+
+    match /live/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isCoach() && ownsNew() && token.size() >= 20;
+      allow update: if isCoach() && ownsExisting() && ownsNew();
+      allow delete: if isCoach() && (ownsExisting() || isAdmin());
+    }
+  }
+}

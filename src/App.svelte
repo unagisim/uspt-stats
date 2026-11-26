@@ -12,7 +12,8 @@
     | { name: 'live'; id: string }
     | { name: 'stats'; id: string }
     /** `matchId` : ouvert depuis la saisie d'un match, on y revient ensuite. */
-    | { name: 'presets'; matchId?: string };
+    | { name: 'presets'; matchId?: string }
+    | { name: 'coaches' };
 
   let route = $state<Route>({ name: 'home' });
 
@@ -41,7 +42,17 @@
     onNew={() => go({ name: 'new' })}
     onOpen={(id) => go({ name: 'live', id })}
     onPresets={() => go({ name: 'presets' })}
+    onCoaches={() => go({ name: 'coaches' })}
   />
+{:else if route.name === 'coaches'}
+  <!-- Écran chargé à la demande (il utilise Firebase). -->
+  {#await import('./screens/Coaches.svelte')}
+    <p class="page">Chargement…</p>
+  {:then { default: Coaches }}
+    <Coaches onBack={() => go({ name: 'home' })} />
+  {:catch}
+    <p class="page">Cet écran nécessite une connexion réseau. <button onclick={() => go({ name: 'home' })}>Retour</button></p>
+  {/await}
 {:else if route.name === 'new'}
   <NewMatch onCancel={() => go({ name: 'home' })} onCreated={(id) => (route = { name: 'live', id })} />
 {:else if route.name === 'presets'}

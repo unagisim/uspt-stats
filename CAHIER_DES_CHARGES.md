@@ -155,5 +155,63 @@ Thèmes clair et sombre, avec un mode « plein soleil » à fort contraste.
 | Stats | Calculées pour les deux joueurs. |
 | Suivi du score en direct par d'autres personnes | Reporté en V2, avec le cloud. |
 | Dictée vocale | Peut nécessiter du réseau ; sans réseau, seule la note écrite est disponible. |
-| Hébergement | À décider plus tard. |
+| Hébergement | GitHub Pages (décidé le 24/11/2026), dépôt public `unagisim/uspt-stats`. |
 | Framework | Svelte. |
+
+La V1 est livrée en version 1.0.0 (étiquette Git `v1.0.0`, 24/11/2026).
+
+## 11. V2 : suivi du score en direct et synchronisation (validée par le bureau le 24/11/2026)
+
+Source : document « USPT Stats — Cadrage de la V2 », toutes les recommandations validées.
+
+### 11.1 Décisions
+
+| # | Sujet | Décision |
+|---|---|---|
+| 1 | Suivi en direct | Un lien par match (et son QR code), sans compte, en lecture seule. Le coach peut l'activer et le désactiver à tout moment. |
+| 2 | Saisie | Un compte par coach, connexion par lien envoyé par e-mail (sans mot de passe). Un seul coach saisit un match donné. |
+| 3 | Données publiques | Score, horaires et format uniquement. Stats et notes réservées aux coachs. |
+| 4 | Noms en public | Prénom et initiale du nom : « Léo M. ». |
+| 5 | Accord des familles | Information de toutes les familles ; accord parental écrit pour les mineurs, recueilli à l'inscription. |
+| 6 | Service cloud | Firebase (Firestore + Authentication), données hébergées en Europe. |
+| 7 | Conservation | 1 an après la fin de la saison, puis suppression. Chaque coach garde sa sauvegarde locale. |
+| 8 | Propriété du compte | Compte Firebase au nom du club, deux administrateurs. |
+
+### 11.2 Fonctionnement
+
+- **Local d'abord** : la saisie reste enregistrée sur le téléphone (IndexedDB), comme en V1. L'envoi vers Firestore se fait en arrière-plan, et reprend dès le retour du réseau.
+- **Coachs** : seuls les coachs inscrits par un administrateur (liste d'adresses e-mail) peuvent se connecter et écrire. Un coach voit les matchs de tous les coachs du club, mais ne modifie que les siens.
+- **Direct** : un document public séparé, par match partagé, ne contient que les données autorisées (noms « Prénom N. », format, score, serveur, horaires, statut). Son identifiant est un jeton aléatoire impossible à deviner ; la page « Suivre le match » l'écoute en temps réel.
+- **Accord des familles dans l'application** : chaque joueur porte un indicateur « Direct autorisé ». Le partage en direct n'est proposé que si les deux joueurs l'ont ; sinon un message explique pourquoi.
+- **Reprise de l'existant** : à la première connexion, le coach peut envoyer ses matchs déjà enregistrés.
+
+### 11.3 Données en ligne
+
+| Collection | Contenu | Lecture | Écriture |
+|---|---|---|---|
+| `coaches` | Adresse e-mail, nom, rôle (coach ou administrateur) | Coachs | Administrateurs |
+| `matches` | Match complet (événements, notes, stats), propriétaire | Coachs | Coach propriétaire |
+| `live` | Résumé public d'un match partagé | Tout le monde, par lien | Coach propriétaire |
+
+Les règles de sécurité Firestore appliquent ce tableau ; elles sont versionnées dans le dépôt.
+
+### 11.4 RGPD
+
+- Hébergement Firestore en région européenne.
+- Page « Données personnelles » dans l'application : données traitées, finalité, durée, contact du club.
+- Suppression d'un match : supprime aussi ses copies en ligne (match et direct).
+- Purge annuelle des matchs de plus d'un an après la saison, lancée par un administrateur depuis l'application.
+- La dictée vocale (transcription par Google) est signalée dans la page « Données personnelles ».
+
+### 11.5 Coûts
+
+Plan gratuit Firebase (« Spark ») sans moyen de paiement : aucune facturation possible. Si un quota gratuit est atteint, le service se met en pause jusqu'au lendemain ; la saisie locale continue.
+
+### 11.6 Étapes
+
+1. Création du projet Firebase par le club (guide fourni) et transmission de sa configuration web.
+2. Connexion des coachs et liste des coachs autorisés.
+3. Synchronisation des matchs et reprise de l'existant.
+4. Page publique « Suivre le match », lien et QR code, indicateur « Direct autorisé ».
+5. Page « Données personnelles » et purge annuelle.
+6. Essai à deux téléphones, puis mise en service avec une première équipe.
